@@ -15,12 +15,16 @@ Este repositório contém quatro katas independentes para o teste técnico da Un
 - `kata-3`: análise técnica e plano de ação para um sistema legado.
 - `kata-4`: pipeline de relatórios em CSV com saídas determinísticas.
 
-## Stack(s) Utilizada(s) e Justificativa da Escolha
+## Stack(s) Utilizada(s)
 
 - C# / .NET: usado no backend da Kata 2 para construir uma API HTTP com separação entre controller, serviço, repositório, DTOs e modelos.
 - React + TypeScript: usado no frontend da Kata 2 para criar uma interface tipada, simples de evoluir e alinhada com a stack web solicitada.
 - Python: usado nas Katas 1 e 4 para algoritmos, scripts, testes e processamento de dados com baixo overhead e sem dependências desnecessárias.
 - Markdown: usado na Kata 3 porque a entrega solicitada é análise técnica, plano de ação e decisão de arquitetura.
+
+### Justificativa da Escolha
+
+- A Stack foi escolhida com o objetivo de se ter um diferencial tendo em vista que a stack utilizada pela Unimed é a mesma que está no teste, assim facilitando a avaliação e comparação.
 
 ## Qualidade, Testes e Segurança
 
