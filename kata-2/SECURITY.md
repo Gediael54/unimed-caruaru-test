@@ -1,34 +1,34 @@
-# Security Notes
+# Notas de Segurança
 
-## Scope
+## Escopo
 
-This kata is a single-user task board without authentication. The security goal is to keep the implementation small, explicit, and resistant to common avoidable mistakes within that scope.
+Este kata é um quadro de tarefas monousuário sem autenticação. O objetivo de segurança é manter a implementação pequena, explícita e resistente a erros comuns dentro desse escopo.
 
-## Implemented Controls
+## Controles Implementados
 
-- Input validation for task titles and statuses.
-- Maximum task title length of 120 characters.
-- Maximum request body size of 16 KB.
-- JSON depth limit.
-- CORS restricted to the local frontend origin.
-- Controlled error messages.
-- No database credentials, secrets, or environment-specific tokens.
-- No dynamic SQL or shell execution.
-- Defensive response headers in the API.
+- Validação de entrada para título e status de tarefa.
+- Título limitado a 120 caracteres.
+- Corpo da requisição limitado a 16 KB.
+- Profundidade máxima para payload JSON.
+- CORS restrito à origem local do frontend.
+- Mensagens de erro controladas, sem exposição de detalhes internos.
+- Sem credenciais de banco, segredos ou tokens específicos de ambiente no código.
+- Sem geração dinâmica de SQL ou execução de shell.
+- Cabeçalhos defensivos nas respostas da API.
 
-## Residual Risks
+## Riscos Residuais
 
-- In-memory storage is not durable and is not appropriate for production.
-- There is no authentication or authorization because the requirement was scoped as a single-user board.
-- Transport security depends on the deployment environment. Local development runs over HTTP.
-- Dependency scanning should be run in CI after frontend dependencies are installed.
+- O armazenamento em memória não é durável e não é adequado para produção.
+- Não há autenticação nem autorização, porque o escopo foi definido como monousuário.
+- A segurança de transporte depende do ambiente de deploy. O desenvolvimento local roda em HTTP.
+- A varredura de dependências deve rodar em CI depois que as dependências de frontend forem instaladas.
 
-## Recommended Production Additions
+## Adições Recomendadas Para Produção
 
-- HTTPS-only deployment with HSTS.
-- Authentication through a trusted identity provider.
-- Per-user authorization checks.
-- Durable persistence with migrations.
+- Deploy exclusivamente em HTTPS com HSTS.
+- Autenticação via provedor de identidade confiável.
+- Verificações de autorização por usuário.
+- Persistência durável com migrações.
 - Rate limiting.
-- Centralized logs, metrics, and alerting.
-- Automated dependency and container scanning.
+- Logs, métricas e alertas centralizados.
+- Varredura automatizada de dependências e contêineres.

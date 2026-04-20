@@ -1,30 +1,30 @@
-# Kata 2 Architecture
+# Arquitetura Kata 2
 
-## Goals
+## Objetivos
 
-The task board is intentionally small, but it still keeps clear boundaries so the code is easy to review and extend.
+O quadro de tarefas é propositalmente pequeno, mas ainda mantém fronteiras claras entre as camadas para que o código seja fácil de revisar e evoluir.
 
-## Backend Structure
+## Estrutura do Backend
 
-- `Controllers/`: HTTP routing, status codes, and request/response mapping.
-- `Dtos/`: public API contracts.
-- `Models/`: internal domain/storage models.
-- `Repositories/`: persistence boundary. The current implementation is in-memory.
-- `Services/`: validation and business rules.
+- `Controllers/`: roteamento HTTP, códigos de status e mapeamento entre requisição e resposta.
+- `Dtos/`: contratos públicos da API.
+- `Models/`: modelos internos de domínio e armazenamento.
+- `Repositories/`: fronteira de persistência. A implementação atual é em memória.
+- `Services/`: validação e regras de negócio.
 
-The controller does not own task rules. The repository does not validate business input. DTOs keep external contracts separate from internal models.
+O controller não é dono das regras de tarefa. O repositório não valida entrada de negócio. Os DTOs mantêm os contratos externos separados dos modelos internos.
 
-## Frontend Structure
+## Estrutura do Frontend
 
-- `src/api.ts`: API client functions.
-- `src/types.ts`: task types shared by the UI and API client.
-- `src/App.tsx`: task board behavior and rendering.
-- `src/styles.css`: layout and visual rules.
+- `src/api.ts`: funções do cliente HTTP da API.
+- `src/types.ts`: tipos de tarefa compartilhados entre UI e cliente de API.
+- `src/App.tsx`: comportamento do quadro e renderização.
+- `src/styles.css`: regras de layout e estilo.
 
-For a larger app, the next step would be splitting `App.tsx` into `components/`, `services/`, and `models/`. For this kata, the current structure keeps the surface area small without hiding the main flow.
+Em uma aplicação maior o próximo passo seria dividir `App.tsx` em `components/`, `services/` e `models/`. Para o escopo do kata, a estrutura atual mantém a superfície pequena sem esconder o fluxo principal.
 
 ## System Design
 
-The frontend talks to the backend over HTTP. During local development, Vite proxies `/tasks` to `http://localhost:5000`. The backend keeps tasks in memory because the requirement does not demand durable persistence.
+O frontend conversa com o backend via HTTP. No desenvolvimento local o Vite faz proxy de `/tasks` para `http://localhost:5000`. O backend mantém as tarefas em memória porque o requisito não exige persistência durável.
 
-Production evolution should add a database, authentication, ownership checks, observability, and migration management before supporting real users.
+A evolução para produção deve adicionar banco de dados, autenticação, verificação de propriedade, observabilidade e gestão de migrações antes de atender usuários reais.
