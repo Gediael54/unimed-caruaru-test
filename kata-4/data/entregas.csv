@@ -1,0 +1,6 @@
+id_pedido,data_prevista_entrega,data_realizada_entrega,status_entrega
+P001,22/04/2026,22/04/2026,entregue
+P002,2026-04-22,2026-04-24,entregue
+P003,2026-04-21T00:00:00,,pendente
+P004,20/04/2026,19/04/2026,entregue
+P999,2026-04-20,2026-04-21,entregue

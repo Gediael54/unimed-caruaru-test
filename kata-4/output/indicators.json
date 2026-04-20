@@ -1,0 +1,37 @@
+{
+  "average_delay_days_for_delayed_orders": 2.0,
+  "average_ticket_by_state": {
+    "AL": "45.75",
+    "PE": "153.47",
+    "SP": "300.00"
+  },
+  "delivery_percentages": {
+    "delayed": 33.33,
+    "on_time": 66.67
+  },
+  "orphan_delivery_count": 1,
+  "orphan_delivery_ids": [
+    "P999"
+  ],
+  "rejected_row_count": 0,
+  "rejected_rows": [],
+  "top_3_cities_by_order_volume": [
+    {
+      "city": "Caruaru",
+      "orders": 2
+    },
+    {
+      "city": "Recife",
+      "orders": 1
+    },
+    {
+      "city": "Sao Paulo",
+      "orders": 1
+    }
+  ],
+  "total_orders_by_status": {
+    "cancelado": 1,
+    "pago": 3,
+    "pendente": 1
+  }
+}
