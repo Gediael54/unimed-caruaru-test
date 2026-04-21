@@ -1,0 +1,33 @@
+name: Kata 4
+
+on:
+  push:
+    paths:
+      - ".github/workflows/kata-4.yml"
+      - "kata-4/**"
+      - "scripts/kata.sh"
+  pull_request:
+    paths:
+      - ".github/workflows/kata-4.yml"
+      - "kata-4/**"
+      - "scripts/kata.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-kata-4:
+    name: Validate Kata 4
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run Kata 4 validation
+        run: bash scripts/kata.sh kata4 all

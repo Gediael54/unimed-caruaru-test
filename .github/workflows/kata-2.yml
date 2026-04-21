@@ -1,0 +1,43 @@
+name: Kata 2
+
+on:
+  push:
+    paths:
+      - ".github/workflows/kata-2.yml"
+      - "kata-2/**"
+      - "scripts/kata.sh"
+  pull_request:
+    paths:
+      - ".github/workflows/kata-2.yml"
+      - "kata-2/**"
+      - "scripts/kata.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-kata-2:
+    name: Validate Kata 2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "kata-2/src/TaskBoard.Web/package-lock.json"
+
+      - name: Install frontend dependencies
+        run: npm --prefix kata-2/src/TaskBoard.Web ci
+
+      - name: Run Kata 2 validation
+        run: bash scripts/kata.sh kata2 all
