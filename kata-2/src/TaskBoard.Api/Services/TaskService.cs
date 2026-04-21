@@ -64,6 +64,12 @@ public sealed class TaskService(ITaskRepository repository)
             return ServiceResult<TaskResponse>.NotFound("Task not found.");
         }
 
+        if (request.Title is null && request.Status is null)
+        {
+            return ServiceResult<TaskResponse>.Validation(
+                "At least one updatable field must be provided.");
+        }
+
         var nextTitle = current.Title;
         if (request.Title is not null)
         {
@@ -86,6 +92,11 @@ public sealed class TaskService(ITaskRepository repository)
             }
 
             nextStatus = normalizedStatus.Value!;
+        }
+
+        if (nextTitle == current.Title && nextStatus == current.Status)
+        {
+            return ServiceResult<TaskResponse>.Success(ToResponse(current));
         }
 
         var updated = current with
