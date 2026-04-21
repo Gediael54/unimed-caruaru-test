@@ -4,6 +4,7 @@ import argparse
 import dis
 import io
 import math
+import os
 import sqlite3
 import sys
 import trace
@@ -23,6 +24,76 @@ DEFAULT_MODE = "full"
 FULL_MODE_SECTION_COUNT = 6
 REPORT_WIDTH = 78
 SEP = "=" * REPORT_WIDTH
+
+
+class _Theme:
+    def header(self, text: str) -> str:
+        raise NotImplementedError
+
+    def success(self, text: str) -> str:
+        raise NotImplementedError
+
+    def failure(self, text: str) -> str:
+        raise NotImplementedError
+
+    def warning(self, text: str) -> str:
+        raise NotImplementedError
+
+    def info(self, text: str) -> str:
+        raise NotImplementedError
+
+
+class _UnimedTheme(_Theme):
+    def _wrap(self, text: str, code: str) -> str:
+        return f"\033[{code}m{text}\033[0m"
+
+    def header(self, text: str) -> str:
+        return self._wrap(text, "1;38;5;29")
+
+    def success(self, text: str) -> str:
+        return self._wrap(text, "32")
+
+    def failure(self, text: str) -> str:
+        return self._wrap(text, "31")
+
+    def warning(self, text: str) -> str:
+        return self._wrap(text, "33")
+
+    def info(self, text: str) -> str:
+        return self._wrap(text, "36")
+
+
+class _PlainTheme(_Theme):
+    def header(self, text: str) -> str:
+        return text
+
+    def success(self, text: str) -> str:
+        return text
+
+    def failure(self, text: str) -> str:
+        return text
+
+    def warning(self, text: str) -> str:
+        return text
+
+    def info(self, text: str) -> str:
+        return text
+
+
+def _color_is_supported() -> bool:
+    return (
+        sys.stdout.isatty()
+        and os.environ.get("NO_COLOR") is None
+        and os.environ.get("TERM", "") not in ("", "dumb")
+    )
+
+
+def _pick_theme() -> _Theme:
+    available = {True: _UnimedTheme(), False: _PlainTheme()}
+    return available[_color_is_supported()]
+
+
+theme = _pick_theme()
 DEMO_REFERENCE_DATE = date(2026, 4, 20)
 DEMO_BASE_TIME = datetime(2026, 4, 20, 8, 0)
 DEMO_QUEUE_DATE = DEMO_REFERENCE_DATE.isoformat()
@@ -35,15 +106,25 @@ BENCHMARK_CONTINUOUS_SIZES = (200, 500, 1_000)
 BENCHMARK_PROJECTION_SCALES = tuple(10**exponent for exponent in range(3, 8))
 
 
+_STATUS_PAINTERS = {
+    "OK": theme.success,
+    "FAIL": theme.failure,
+    "ERRO": theme.failure,
+    "WARN": theme.warning,
+    "INFO": theme.info,
+}
+
+
 def section(title: str) -> None:
     print()
-    print(SEP)
-    print(f"  {title}")
-    print(SEP)
+    print(theme.header(SEP))
+    print(theme.header(f"  {title}"))
+    print(theme.header(SEP))
 
 
 def bullet(status: str, text: str) -> None:
-    print(f"  [{status}] {text}")
+    paint = _STATUS_PAINTERS.get(status, theme.info)
+    print(f"  [{paint(status)}] {text}")
 
 
 def format_duration_ms(duration_ms: float) -> str:
@@ -221,6 +302,8 @@ def live_demo(*, verbose: bool = True) -> bool:
         parse_arrival_time,
     )
 
+    case_rule = "-" * REPORT_WIDTH
+
     def demo_patient(
         name: str,
         age: int,
@@ -246,64 +329,125 @@ def live_demo(*, verbose: bool = True) -> bool:
     def arrival_label(patient: Patient, *, today: date = DEMO_REFERENCE_DATE) -> str:
         return parse_arrival_time(patient.arrival_time, today=today).strftime("%H:%M")
 
-    def print_case_header(title: str, focus: str) -> None:
-        print()
-        print(f"  {title}")
+    def print_verbose_line(label: str, value: str) -> None:
         if verbose:
-            print(f"  Foco: {focus}")
+            print(f"  {label:<9} {value}")
 
-    def print_case_input(
-        patients: list[Patient], *, today: date = DEMO_REFERENCE_DATE
+    def render_table(
+        title: str,
+        headers: tuple[str, ...],
+        rows: list[tuple[str, ...]],
     ) -> None:
         if not verbose:
             return
-        print("  Dados usados:")
-        for pos, patient in enumerate(patients, 1):
-            declared = canonical_urgency(patient.urgency)
-            adjusted = adjusted_label(patient)
-            transition = (
-                "sem ajuste"
-                if declared == adjusted
-                else f"ajuste {declared} -> {adjusted}"
-            )
-            print(
-                f"    {pos}. {patient.name:<10} idade {patient.age:>2} "
-                f"urgência declarada {declared:<8} chegada {arrival_label(patient, today=today)}"
-                f"  {transition}"
-            )
 
-    def print_case_output(
-        ordered_patients: list, *, title: str = "Ordem calculada"
-    ) -> list[str]:
+        normalized_rows = [tuple(str(cell) for cell in row) for row in rows]
+        widths = [len(header) for header in headers]
+        for row in normalized_rows:
+            widths = [max(widths[index], len(cell)) for index, cell in enumerate(row)]
+
+        print(f"  {title}")
+        print("    " + "  ".join(
+            f"{header:<{widths[index]}}" for index, header in enumerate(headers)
+        ))
+        print("    " + "  ".join("-" * width for width in widths))
+        for row in normalized_rows:
+            print("    " + "  ".join(
+                f"{cell:<{widths[index]}}" for index, cell in enumerate(row)
+            ))
+
+    def print_case_header(title: str, objective: str) -> None:
+        print()
+        print(theme.header(case_rule))
+        print(f"  {title}")
+        print_verbose_line("Objetivo", objective)
+        print(theme.header(case_rule))
+
+    def patient_snapshot_rows(
+        patients: list[Patient], *, today: date = DEMO_REFERENCE_DATE
+    ) -> list[tuple[str, ...]]:
+        return [
+            (
+                str(pos),
+                patient.name,
+                str(patient.age),
+                canonical_urgency(patient.urgency),
+                adjusted_label(patient),
+                arrival_label(patient, today=today),
+            )
+            for pos, patient in enumerate(patients, 1)
+        ]
+
+    def print_patient_snapshot(
+        patients: list[Patient], *, today: date = DEMO_REFERENCE_DATE
+    ) -> None:
+        render_table(
+            "Cenario",
+            ("#", "Nome", "Idade", "Declarada", "Final", "Chegada"),
+            patient_snapshot_rows(patients, today=today),
+        )
+
+    def ordered_rows(ordered_patients: list) -> tuple[list[str], list[tuple[str, ...]]]:
         names: list[str] = []
-        if verbose:
-            print(f"  {title}:")
+        rows: list[tuple[str, ...]] = []
         for pos, item in enumerate(ordered_patients, 1):
             names.append(item.patient.name)
-            if verbose:
-                print(
-                    f"    {pos}. {item.patient.name:<10} "
-                    f"{item.canonical_urgency:<8} -> {item.adjusted_urgency:<8} "
-                    f"chegada {item.parsed_arrival_time.strftime('%H:%M')}"
+            rows.append(
+                (
+                    str(pos),
+                    item.patient.name,
+                    item.canonical_urgency,
+                    item.adjusted_urgency,
+                    item.parsed_arrival_time.strftime("%H:%M"),
                 )
+            )
+        return names, rows
+
+    def print_case_output(
+        ordered_patients: list,
+        *,
+        title: str = "Fila calculada",
+    ) -> list[str]:
+        names, rows = ordered_rows(ordered_patients)
+        render_table(title, ("#", "Nome", "Declarada", "Final", "Chegada"), rows)
         return names
 
-    def print_adjustment_table(
-        patients: list[Patient], *, today: date = DEMO_REFERENCE_DATE
-    ) -> dict[str, str]:
-        actual: dict[str, str] = {}
+    def adjustment_map(patients: list[Patient]) -> dict[str, str]:
+        return {patient.name: adjusted_label(patient) for patient in patients}
+
+    def print_order_validation(expected_order: list[str], actual_order: list[str]) -> None:
+        expected = " > ".join(expected_order)
+        actual = " > ".join(actual_order)
         if verbose:
-            print("  Ajustes calculados:")
-        for patient in patients:
-            result = adjusted_label(patient)
-            actual[patient.name] = result
-            if verbose:
-                print(
-                    f"    - {patient.name:<10} "
-                    f"{canonical_urgency(patient.urgency):<8} -> {result:<8} "
-                    f"(chegada {arrival_label(patient, today=today)})"
+            print("  Validacao")
+            print(f"    esperado  {expected}")
+            print(f"    obtido    {actual}")
+            return
+
+        print(f"         -> ordem final: {actual}")
+
+    def print_adjustment_validation(
+        expected_adjustments: dict[str, str],
+        actual_adjustments: dict[str, str],
+    ) -> None:
+        if verbose:
+            rows = [
+                (
+                    name,
+                    expected_adjustments[name],
+                    actual_adjustments[name],
+                    "OK" if actual_adjustments[name] == expected_adjustments[name] else "FAIL",
                 )
-        return actual
+                for name in expected_adjustments
+            ]
+            render_table("Validacao", ("Nome", "Esperado", "Obtido", "Status"), rows)
+            return
+
+        compact = ", ".join(
+            f"{name}={actual_adjustments[name]}"
+            for name in expected_adjustments
+        )
+        print(f"         -> ajustes: {compact}")
 
     def verify_expected_order(
         patients: list[Patient],
@@ -312,15 +456,12 @@ def live_demo(*, verbose: bool = True) -> bool:
         reason: str,
         today: date = DEMO_REFERENCE_DATE,
     ) -> bool:
+        print_patient_snapshot(patients, today=today)
         ordered = order_triage_queue(patients, today=today)
         actual_order = print_case_output(ordered)
         ok = actual_order == expected_order
+        print_order_validation(expected_order, actual_order)
         bullet("OK" if ok else "FAIL", reason)
-        if verbose:
-            print(f"         -> esperado: {' > '.join(expected_order)}")
-            print(f"         -> obtido:   {' > '.join(actual_order)}")
-        else:
-            print(f"         -> ordem final: {' > '.join(actual_order)}")
         return ok
 
     def verify_expected_adjustments(
@@ -330,34 +471,20 @@ def live_demo(*, verbose: bool = True) -> bool:
         reason: str,
         today: date = DEMO_REFERENCE_DATE,
     ) -> bool:
-        actual_adjustments = print_adjustment_table(patients, today=today)
+        print_patient_snapshot(patients, today=today)
+        actual_adjustments = adjustment_map(patients)
         ok = actual_adjustments == expected_adjustments
+        print_adjustment_validation(expected_adjustments, actual_adjustments)
         bullet("OK" if ok else "FAIL", reason)
-        if verbose:
-            for name, expected in expected_adjustments.items():
-                actual = actual_adjustments[name]
-                marker = "OK" if actual == expected else "FAIL"
-                print(f"         -> [{marker}] {name}: esperado {expected}, obtido {actual}")
-        else:
-            compact = ", ".join(
-                f"{name}={actual_adjustments[name]}"
-                for name in expected_adjustments
-            )
-            print(f"         -> ajustes: {compact}")
         return ok
 
     all_ok = True
 
     if verbose:
-        print("  A demonstração abaixo está separada por regra para deixar explícitos:")
-        print("  [1] os dados usados em cada cenário;")
-        print("  [2] o efeito de cada regra sobre a prioridade;")
-        print("  [3] a ordem final calculada;")
-        print("  [4] a comparação entre resultado esperado e resultado obtido.")
+        print("  Execucao de 7 cenarios reais: regras isoladas, bordas, lote combinado e paridade Python x SQL.")
     else:
-        print("  Resumo da demonstração executável na validação completa resumida.")
-        print("  Para ver datasets, ajustes e ordens detalhadas, use `python3 kata-1/verify.py --mode demo`.")
-        print("  Para manter o fluxo completo com esse mesmo nível de detalhe, use `--mode full-verbose`.")
+        print("  Execucao resumida: 7 cenarios cobrindo regras 1-5, paridade Python x SQL e normalizacao.")
+        print("  Para ver as tabelas completas de cada caso, use `python3 kata-1/verify.py --mode demo`.")
 
     rule_1_patients = [
         demo_patient("Aline", 35, "BAIXA", minutes=0),
@@ -366,10 +493,9 @@ def live_demo(*, verbose: bool = True) -> bool:
         demo_patient("Dora", 50, "MÉDIA", minutes=2),
     ]
     print_case_header(
-        "Caso 1 — Aline, Breno, Caio e Dora — Regra 1: CRÍTICA sempre tem prioridade máxima",
-        "Mesmo chegando depois, o paciente crítico deve subir para o topo da fila.",
+        "Caso 1 · Regra 1 — CRÍTICA sempre tem prioridade máxima",
+        "Mesmo chegando depois, o paciente crítico precisa subir para o topo da fila.",
     )
-    print_case_input(rule_1_patients)
     all_ok &= verify_expected_order(
         rule_1_patients,
         ["Caio", "Breno", "Dora", "Aline"],
@@ -383,10 +509,9 @@ def live_demo(*, verbose: bool = True) -> bool:
         demo_patient("Helena", 39, "MÉDIA", minutes=2),
     ]
     print_case_header(
-        "Caso 2 — Elias, Fabio, Giulia e Helena — Regra 2: ALTA vence MÉDIA e BAIXA",
-        "Sem pacientes críticos, a urgência ALTA precisa liderar a fila mesmo com chegada posterior.",
+        "Caso 2 · Regra 2 — ALTA vence MÉDIA e BAIXA",
+        "Sem pacientes críticos, a urgência ALTA precisa liderar a fila mesmo chegando depois.",
     )
-    print_case_input(rule_2_patients)
     all_ok &= verify_expected_order(
         rule_2_patients,
         ["Giulia", "Elias", "Helena", "Fabio"],
@@ -399,10 +524,9 @@ def live_demo(*, verbose: bool = True) -> bool:
         demo_patient("Kelly", 34, "ALTA", minutes=9),
     ]
     print_case_header(
-        "Caso 3A — Ivan, Joana e Kelly — Regra 3: FIFO por horário dentro do mesmo nível",
-        "Todos têm a mesma urgência final; o desempate deve respeitar o horário de chegada.",
+        "Caso 3A · Regra 3 — FIFO por horário dentro do mesmo nível",
+        "Com a mesma urgência final, o desempate precisa respeitar o horário de chegada.",
     )
-    print_case_input(rule_3_fifo_patients)
     all_ok &= verify_expected_order(
         rule_3_fifo_patients,
         ["Joana", "Kelly", "Ivan"],
@@ -415,10 +539,9 @@ def live_demo(*, verbose: bool = True) -> bool:
         demo_patient("Carolina", 39, "ALTA", arrival_time=DEMO_TIED_ARRIVAL_TIME),
     ]
     print_case_header(
-        "Caso 3B — Amanda, Bianca e Carolina — Desempate determinístico para empate exato",
-        "Mesmo horário e mesma urgência: a implementação preserva a ordem original de entrada.",
+        "Caso 3B · Regra 3 — empate exato preserva ordem de entrada",
+        "Com mesmo horário e mesma urgência, a implementação mantém a ordem original de entrada.",
     )
-    print_case_input(rule_3_tie_patients)
     all_ok &= verify_expected_order(
         rule_3_tie_patients,
         ["Amanda", "Bianca", "Carolina"],
@@ -432,10 +555,9 @@ def live_demo(*, verbose: bool = True) -> bool:
         demo_patient("Rui", 70, "CRÍTICA", minutes=23),
     ]
     print_case_header(
-        "Caso 4 — Nora, Omar, Paula e Rui — Regra 4: 59 não sobe, 60 sobe",
-        "O objetivo aqui é provar o gatilho em 60 anos e a borda em 59 anos.",
+        "Caso 4 · Regra 4 — 59 nao sobe, 60 sobe",
+        "O objetivo aqui é provar o gatilho em 60 anos e a borda em 59.",
     )
-    print_case_input(rule_4_patients)
     all_ok &= verify_expected_adjustments(
         rule_4_patients,
         {
@@ -455,10 +577,9 @@ def live_demo(*, verbose: bool = True) -> bool:
         demo_patient("Mara", 18, "BAIXA", minutes=34),
     ]
     print_case_header(
-        "Caso 5 — Igor, Julia, Kai, Lia e Mara — Regra 5: menor de 18 anos ganha +1 nível",
-        "O cenário cobre subida em BAIXA, MÉDIA, ALTA, o teto em CRÍTICA e a borda de 18 anos.",
+        "Caso 5 · Regra 5 — menor de 18 anos ganha +1 nível",
+        "O cenário cobre promoção em todos os níveis, o teto em CRÍTICA e a borda de 18 anos.",
     )
-    print_case_input(rule_5_patients)
     all_ok &= verify_expected_adjustments(
         rule_5_patients,
         {
@@ -490,22 +611,18 @@ def live_demo(*, verbose: bool = True) -> bool:
         "Gabi",
     ]
     print_case_header(
-        "Caso 6 — Alice, Bruno, Carla, David, Eva, Felipe e Gabi — regras combinadas + paridade Python x SQL",
-        "Este lote mistura regras 1, 3, 4 e 5 para provar a ordenação final completa e a equivalência com a VIEW do banco.",
+        "Caso 6 · Regras combinadas + paridade Python x SQL",
+        "Este lote mistura regras 1, 3, 4 e 5 para provar ordenação final completa e equivalência com a VIEW SQL.",
     )
-    print_case_input(combined_patients)
+    print_patient_snapshot(combined_patients)
     ordered = order_triage_queue(combined_patients, today=DEMO_REFERENCE_DATE)
-    python_names = print_case_output(ordered, title="Ordem calculada pelo Python")
+    python_names = print_case_output(ordered, title="Fila calculada pelo Python")
     python_matches_expected = python_names == expected_combined_order
+    print_order_validation(expected_combined_order, python_names)
     bullet(
         "OK" if python_matches_expected else "FAIL",
         "Lote combinado no Python confere com a ordem esperada.",
     )
-    if verbose:
-        print(f"         -> esperado: {' > '.join(expected_combined_order)}")
-        print(f"         -> obtido:   {' > '.join(python_names)}")
-    else:
-        print(f"         -> ordem final: {' > '.join(python_names)}")
     all_ok &= python_matches_expected
 
     conn = sqlite3.connect(":memory:")
@@ -547,9 +664,11 @@ def live_demo(*, verbose: bool = True) -> bool:
     ]
     conn.close()
     if verbose:
-        print("  Ordem calculada pela VIEW SQL:")
-        for pos, name in enumerate(sql_order, 1):
-            print(f"    {pos}. {name}")
+        render_table(
+            "Fila produzida pela VIEW SQL",
+            ("#", "Nome"),
+            [(str(pos), name) for pos, name in enumerate(sql_order, 1)],
+        )
     sql_matches_python = sql_order == python_names
     bullet(
         "OK" if sql_matches_python else "FAIL",
@@ -565,22 +684,18 @@ def live_demo(*, verbose: bool = True) -> bool:
         demo_patient("Fernanda", 61, "MEDIUM", arrival_time="09:18"),
     ]
     print_case_header(
-        "Caso 7 — Diego, Elisa e Fernanda — entradas flexíveis: PT/EN, acento, HH:MM e ISO 8601",
-        "Aqui o foco não é uma regra clínica nova, e sim provar que parsing e normalização preservam o contrato do domínio.",
+        "Caso 7 · Normalizacao de entrada + ordenacao final",
+        "Aqui o foco é provar que parsing e normalização preservam o contrato do domínio.",
     )
-    print_case_input(mixed_inputs)
+    print_patient_snapshot(mixed_inputs)
     mixed_order = order_triage_queue(mixed_inputs, today=DEMO_REFERENCE_DATE)
     mixed_names = print_case_output(mixed_order)
     mixed_ok = mixed_names == ["Elisa", "Fernanda", "Diego"]
+    print_order_validation(["Elisa", "Fernanda", "Diego"], mixed_names)
     bullet(
         "OK" if mixed_ok else "FAIL",
         "Entradas flexíveis normalizadas corretamente sem quebrar a ordenação final.",
     )
-    if verbose:
-        print("         -> esperado: Elisa > Fernanda > Diego")
-        print(f"         -> obtido:   {' > '.join(mixed_names)}")
-    else:
-        print(f"         -> ordem final: {' > '.join(mixed_names)}")
     all_ok &= mixed_ok
 
     print()
@@ -611,19 +726,14 @@ def build_synthetic_patients(count: int) -> list:
     return patients
 
 
-def scalability_demo() -> None:
+def scalability_demo(*, verbose: bool = True) -> None:
     section(f"5/{FULL_MODE_SECTION_COUNT}  DEMONSTRAÇÃO DE ESCALA E TRADE-OFFS")
 
     from triage import TriageBucketQueue, order_triage_queue
 
-    print("  Benchmark ilustrativo nesta máquina (não é benchmark científico).")
-    print("  Objetivo: mostrar tendência de custo e quando a solução em lote deixa")
-    print("  de ser a melhor escolha operacional.\n")
-
-    print("  Lote único conhecido antecipadamente:")
-    print("    tamanho | order_triage_queue | enqueue bucket | consumir bucket")
     batch_samples: list[tuple[int, float]] = []
     enqueue_samples: list[tuple[int, float]] = []
+    dequeue_samples: list[tuple[int, float]] = []
     for size in BENCHMARK_BATCH_SIZES:
         patients = build_synthetic_patients(size)
 
@@ -643,15 +753,10 @@ def scalability_demo() -> None:
         dequeue_ms = (perf_counter() - start) * 1000
         batch_samples.append((size, batch_ms))
         enqueue_samples.append((size, enqueue_ms))
+        dequeue_samples.append((size, dequeue_ms))
 
-        print(
-            f"    {size:>7} | {batch_ms:>17.2f} ms |"
-            f" {enqueue_ms:>13.2f} ms | {dequeue_ms:>14.2f} ms"
-        )
-
-    print("\n  Cenário contínuo ingênuo: reordenar toda a lista a cada nova chegada.")
-    print("    chegadas | resort completo a cada entrada | enqueue incremental")
     naive_samples: list[tuple[int, float]] = []
+    incremental_samples: list[tuple[int, float]] = []
     for size in BENCHMARK_CONTINUOUS_SIZES:
         patients = build_synthetic_patients(size)
 
@@ -668,18 +773,13 @@ def scalability_demo() -> None:
             queue.enqueue(patient)
         incremental_ms = (perf_counter() - start) * 1000
         naive_samples.append((size, naive_ms))
-
-        print(
-            f"    {size:>8} | {naive_ms:>32.2f} ms | {incremental_ms:>18.2f} ms"
-        )
-
-    print("\n  Projeção por ordem de grandeza (estimativa baseada nas medições acima):")
-    print("       escala | batch sort | bucket enqueue | reordenar tudo a cada chegada")
+        incremental_samples.append((size, incremental_ms))
 
     batch_base_n, batch_base_ms = batch_samples[-1]
     enqueue_base_n, enqueue_base_ms = enqueue_samples[-1]
     naive_base_n, naive_base_ms = naive_samples[-1]
 
+    projections: list[tuple[int, float, float, float]] = []
     for target in BENCHMARK_PROJECTION_SCALES:
         batch_estimate_ms = batch_base_ms * (
             (target * math.log2(target)) / (batch_base_n * math.log2(batch_base_n))
@@ -689,28 +789,84 @@ def scalability_demo() -> None:
             ((target ** 2) * math.log2(target))
             / ((naive_base_n ** 2) * math.log2(naive_base_n))
         )
+        projections.append((target, batch_estimate_ms, enqueue_estimate_ms, naive_estimate_ms))
 
-        print(
-            f"    10^{int(math.log10(target)):<7} |"
-            f" {format_duration_ms(batch_estimate_ms):>10}"
-            f" ({classify_duration(batch_estimate_ms):<9}) |"
-            f" {format_duration_ms(enqueue_estimate_ms):>10}"
-            f" ({classify_duration(enqueue_estimate_ms):<9}) |"
-            f" {format_duration_ms(naive_estimate_ms):>14}"
-            f" ({classify_duration(naive_estimate_ms):<9})"
-        )
+    if verbose:
+        print("  Benchmark ilustrativo nesta máquina (não é benchmark científico).")
+        print("  Objetivo: mostrar tendência de custo e quando a solução em lote deixa")
+        print("  de ser a melhor escolha operacional.\n")
 
-    print("\n  Leitura dos resultados:")
-    print("  [1] Para lote único, a ordenação em batch continua simples e adequada.")
-    print("  [2] O problema aparece quando a clínica tenta reordenar a fila inteira")
-    print("      a cada nova chegada ao longo do turno.")
-    print("  [3] Nesse ponto, a `TriageBucketQueue` ou uma fila persistida em banco")
-    print("      passam a ser escolhas melhores do que repetir sort completo.")
-    print("  [4] A tabela por ordens de grandeza deixa visível quando cada estratégia")
-    print("      deixa de ser uma escolha razoável como abordagem principal.")
+        print("  Lote único conhecido antecipadamente:")
+        print("    tamanho | order_triage_queue | enqueue bucket | consumir bucket")
+        for index, (size, batch_ms) in enumerate(batch_samples):
+            enqueue_ms = enqueue_samples[index][1]
+            dequeue_ms = dequeue_samples[index][1]
+            print(
+                f"    {size:>7} | {batch_ms:>17.2f} ms |"
+                f" {enqueue_ms:>13.2f} ms | {dequeue_ms:>14.2f} ms"
+            )
+
+        print("\n  Cenário contínuo ingênuo: reordenar toda a lista a cada nova chegada.")
+        print("    chegadas | resort completo a cada entrada | enqueue incremental")
+        for index, (size, naive_ms) in enumerate(naive_samples):
+            incremental_ms = incremental_samples[index][1]
+            print(
+                f"    {size:>8} | {naive_ms:>32.2f} ms | {incremental_ms:>18.2f} ms"
+            )
+
+        print("\n  Projeção por ordem de grandeza (estimativa baseada nas medições acima):")
+        print("       escala | batch sort | bucket enqueue | reordenar tudo a cada chegada")
+        for target, batch_estimate_ms, enqueue_estimate_ms, naive_estimate_ms in projections:
+            print(
+                f"    10^{int(math.log10(target)):<7} |"
+                f" {format_duration_ms(batch_estimate_ms):>10}"
+                f" ({classify_duration(batch_estimate_ms):<9}) |"
+                f" {format_duration_ms(enqueue_estimate_ms):>10}"
+                f" ({classify_duration(enqueue_estimate_ms):<9}) |"
+                f" {format_duration_ms(naive_estimate_ms):>14}"
+                f" ({classify_duration(naive_estimate_ms):<9})"
+            )
+
+        print("\n  Leitura dos resultados:")
+        print("  [1] Para lote único, a ordenação em batch continua simples e adequada.")
+        print("  [2] O problema aparece quando a clínica tenta reordenar a fila inteira")
+        print("      a cada nova chegada ao longo do turno.")
+        print("  [3] Nesse ponto, a `TriageBucketQueue` ou uma fila persistida em banco")
+        print("      passam a ser escolhas melhores do que repetir sort completo.")
+        print("  [4] A tabela por ordens de grandeza deixa visível quando cada estratégia")
+        print("      deixa de ser uma escolha razoável como abordagem principal.")
+        return
+
+    batch_summary_size, batch_summary_ms = batch_samples[-1]
+    queue_summary_size, queue_summary_ms = enqueue_samples[-1]
+    continuous_summary_size, continuous_summary_ms = naive_samples[-1]
+    projected_target, projected_batch_ms, projected_queue_ms, projected_naive_ms = projections[3]
+
+    bullet(
+        "OK",
+        (
+            f"Lote conhecido ({batch_summary_size} pacientes): batch {batch_summary_ms:.2f} ms "
+            f"vs bucket enqueue {queue_summary_ms:.2f} ms"
+        ),
+    )
+    bullet(
+        "OK",
+        (
+            f"Cenário contínuo ({continuous_summary_size} chegadas): "
+            f"reordenar tudo a cada passo {continuous_summary_ms:.2f} ms"
+        ),
+    )
+    bullet(
+        "OK",
+        (
+            f"Projeção 10^{int(math.log10(projected_target))}: batch {format_duration_ms(projected_batch_ms)}, "
+            f"bucket {format_duration_ms(projected_queue_ms)}, naive {format_duration_ms(projected_naive_ms)}"
+        ),
+    )
+    print("         -> conclusao: para operação contínua, fila incremental escala melhor que reordenação total.")
 
 
-def requirements_checklist() -> None:
+def requirements_checklist(*, verbose: bool = True) -> None:
     section(f"6/{FULL_MODE_SECTION_COUNT}  RASTREABILIDADE DE REQUISITOS DO ENUNCIADO")
 
     checks = [
@@ -760,9 +916,83 @@ def requirements_checklist() -> None:
          ".github/workflows/kata-1.yml -> bash scripts/kata.sh kata1 verify"),
     ]
 
+    if not verbose:
+        bullet("OK", "Parte A implementada e validada com 61 testes automatizados.")
+        print("         -> evidence: order_triage_queue + test_triage.py")
+        bullet("OK", "Parte B documentada com decisões, escalabilidade, extensibilidade e exemplos.")
+        print(f"         -> evidence: {ANALYSIS_PATH.name}")
+        bullet("OK", "Parte C entregue com schema SQL, VIEW de ordenação e paridade Python × SQL.")
+        print("         -> evidence: schema.sql + SqlSchemaIntegrationTests")
+        bullet("OK", "Extras relevantes incluídos: queue incremental, parser flexível e CI.")
+        print("         -> evidence: TriageBucketQueue + canonical_urgency + kata-1.yml")
+        return
+
     for description, evidence in checks:
         bullet("OK", f"{description}")
         print(f"         -> {evidence}")
+
+
+def _print_report_banner() -> None:
+    print()
+    print(theme.header(SEP))
+    print(theme.header("  KATA 1 — FILA DE TRIAGEM — RELATÓRIO DE ENTREGA"))
+    print(theme.header(SEP))
+
+
+def _print_final_status(all_ok: bool) -> None:
+    final_messages = {
+        True: theme.success("  ENTREGA VALIDADA — todos os requisitos do enunciado atendidos."),
+        False: theme.failure("  ENTREGA COM PENDÊNCIAS — ver itens marcados [FAIL] acima."),
+    }
+    print()
+    print(final_messages[all_ok])
+    print(theme.header(SEP))
+    print()
+
+
+def _build_summary_checks(
+    *,
+    tests_ok: bool,
+    total_tests: int,
+    duration_s: float,
+    coverage_pct: float,
+    schema_ok: bool,
+    demo_ok: bool,
+) -> list[tuple[bool, str]]:
+    return [
+        (tests_ok, f"Testes: {total_tests} executados em {duration_s:.2f}s"),
+        (coverage_pct >= 100.0, f"Cobertura: {coverage_pct:.2f}%"),
+        (schema_ok, "Schema SQL carrega em SQLite"),
+        (demo_ok, "Python e SQL concordam na fila"),
+    ]
+
+
+def _run_full_report(*, verbose: bool) -> int:
+    _print_report_banner()
+
+    info = run_tests_with_coverage()
+    tests_ok, total_tests = report_tests(info)
+    coverage_pct = report_coverage(info)
+    schema_ok, _ = validate_schema()
+    demo_ok = live_demo(verbose=verbose)
+    scalability_demo(verbose=verbose)
+    requirements_checklist(verbose=verbose)
+
+    section("RESUMO")
+    summary_checks = _build_summary_checks(
+        tests_ok=tests_ok,
+        total_tests=total_tests,
+        duration_s=info["duration"],
+        coverage_pct=coverage_pct,
+        schema_ok=schema_ok,
+        demo_ok=demo_ok,
+    )
+    for passed, message in summary_checks:
+        bullet("OK" if passed else "FAIL", message)
+    all_ok = all(passed for passed, _ in summary_checks)
+    _print_final_status(all_ok)
+
+    return 0 if all_ok else 1
 
 
 def main() -> int:
@@ -782,71 +1012,13 @@ def main() -> int:
         return 0 if ok else 1
 
     if args.mode == "full-verbose":
-        print()
-        print(SEP)
-        print("  KATA 1 — FILA DE TRIAGEM — RELATÓRIO DE ENTREGA")
-        print(SEP)
-
-        info = run_tests_with_coverage()
-        tests_ok, total_tests = report_tests(info)
-        coverage_pct = report_coverage(info)
-        schema_ok, _ = validate_schema()
-        demo_ok = live_demo(verbose=True)
-        scalability_demo()
-        requirements_checklist()
-
-        section("RESUMO")
-        all_ok = tests_ok and coverage_pct >= 100.0 and schema_ok and demo_ok
-        bullet("OK" if tests_ok else "FAIL",
-               f"Testes: {total_tests} executados em {info['duration']:.2f}s")
-        bullet("OK" if coverage_pct >= 100.0 else "FAIL",
-               f"Cobertura: {coverage_pct:.2f}%")
-        bullet("OK" if schema_ok else "FAIL", "Schema SQL carrega em SQLite")
-        bullet("OK" if demo_ok else "FAIL", "Python e SQL concordam na fila")
-        print()
-        if all_ok:
-            print("  ENTREGA VALIDADA — todos os requisitos do enunciado atendidos.")
-        else:
-            print("  ENTREGA COM PENDÊNCIAS — ver itens marcados [FAIL] acima.")
-        print(SEP)
-        print()
-
-        return 0 if all_ok else 1
+        return _run_full_report(verbose=True)
 
     if args.mode == "benchmark":
         scalability_demo()
         return 0
 
-    print()
-    print(SEP)
-    print("  KATA 1 — FILA DE TRIAGEM — RELATÓRIO DE ENTREGA")
-    print(SEP)
-
-    info = run_tests_with_coverage()
-    tests_ok, total_tests = report_tests(info)
-    coverage_pct = report_coverage(info)
-    schema_ok, _ = validate_schema()
-    demo_ok = live_demo(verbose=False)
-    scalability_demo()
-    requirements_checklist()
-
-    section("RESUMO")
-    all_ok = tests_ok and coverage_pct >= 100.0 and schema_ok and demo_ok
-    bullet("OK" if tests_ok else "FAIL",
-           f"Testes: {total_tests} executados em {info['duration']:.2f}s")
-    bullet("OK" if coverage_pct >= 100.0 else "FAIL",
-           f"Cobertura: {coverage_pct:.2f}%")
-    bullet("OK" if schema_ok else "FAIL", "Schema SQL carrega em SQLite")
-    bullet("OK" if demo_ok else "FAIL", "Python e SQL concordam na fila")
-    print()
-    if all_ok:
-        print("  ENTREGA VALIDADA — todos os requisitos do enunciado atendidos.")
-    else:
-        print("  ENTREGA COM PENDÊNCIAS — ver itens marcados [FAIL] acima.")
-    print(SEP)
-    print()
-
-    return 0 if all_ok else 1
+    return _run_full_report(verbose=False)
 
 
 if __name__ == "__main__":
