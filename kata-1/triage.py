@@ -47,8 +47,6 @@ def _strip_accents(value: str) -> str:
 
 
 def canonical_urgency(value: str) -> str:
-    """Return the canonical Portuguese urgency label for any accepted alias."""
-
     if not isinstance(value, str) or not value.strip():
         raise ValueError("Urgency is required.")
 
@@ -60,14 +58,6 @@ def canonical_urgency(value: str) -> str:
 
 
 def parse_arrival_time(value: ArrivalInput, *, today: date | None = None) -> datetime:
-    """Parse an arrival timestamp from local ``datetime``, ISO string, or ``HH:MM``.
-
-    ``HH:MM`` inputs use ``today`` (default ``date.today()``) as the reference
-    date so they can be compared with full timestamps in the same queue.
-    Timezone-aware timestamps are rejected because the kata models local clinic
-    time and also accepts ``HH:MM`` values without offset metadata.
-    """
-
     if isinstance(value, datetime):
         if value.tzinfo is not None and value.utcoffset() is not None:
             raise ValueError("Timezone-aware arrival times are not supported.")
@@ -102,8 +92,6 @@ def parse_arrival_time(value: ArrivalInput, *, today: date | None = None) -> dat
 
 @dataclass(frozen=True)
 class Patient:
-    """Input patient record for queue ordering."""
-
     name: str
     age: int
     urgency: str
@@ -113,8 +101,6 @@ class Patient:
 
 @dataclass(frozen=True)
 class PrioritizedPatient:
-    """Patient plus the urgency calculated after business rules."""
-
     patient: Patient
     adjusted_priority: int
     parsed_arrival_time: datetime
@@ -126,8 +112,6 @@ class PrioritizedPatient:
 
 
 def calculate_adjusted_priority(patient: Patient) -> int:
-    """Apply age-based triage rules and return the final numeric priority."""
-
     if isinstance(patient.age, bool) or not isinstance(patient.age, int):
         raise ValueError("Age must be an integer.")
     if patient.age < 0:
@@ -151,8 +135,6 @@ def calculate_adjusted_priority(patient: Patient) -> int:
 def _build_prioritized_patient(
     patient: Patient, *, today: date | None = None
 ) -> PrioritizedPatient:
-    """Normalize inputs and compute the enriched patient representation."""
-
     priority = calculate_adjusted_priority(patient)
     arrival = parse_arrival_time(patient.arrival_time, today=today)
     return PrioritizedPatient(
@@ -166,13 +148,6 @@ def _build_prioritized_patient(
 def order_triage_queue(
     patients: Iterable[Patient], *, today: date | None = None
 ) -> list[PrioritizedPatient]:
-    """Return patients ordered by adjusted urgency and arrival FIFO.
-
-    Ordering is deterministic and stable for exact ties (same adjusted urgency
-    and same arrival time): the original input position is used as the final
-    tie-breaker, preserving FIFO semantics.
-    """
-
     prioritized: list[tuple[int, PrioritizedPatient]] = []
     for index, patient in enumerate(patients):
         prioritized.append(
@@ -199,19 +174,6 @@ _PRIORITIES_DESC: tuple[int, ...] = tuple(
 
 
 class TriageBucketQueue:
-    """Fila de triagem baseada em quatro deques FIFO, uma por nível.
-
-    Algoritmo ótimo para operação contínua: como existem apenas 4 níveis de
-    urgência, um balde (``deque``) por nível entrega ``O(1)`` de inserção e
-    ``O(1)`` para obter o próximo paciente, preservando FIFO por construção.
-
-    ``snapshot()`` é ``O(n)`` e retorna a fila na mesma ordem que
-    :func:`order_triage_queue` produz, desde que o ``enqueue`` seja feito em
-    ordem de chegada dentro de cada bucket de prioridade. Se essa pré-condição
-    for violada, ``enqueue`` falha explicitamente em vez de mascarar uma fila
-    incorreta.
-    """
-
     def __init__(self, *, today: date | None = None) -> None:
         self._today = today
         self._buckets: dict[int, deque[PrioritizedPatient]] = {
