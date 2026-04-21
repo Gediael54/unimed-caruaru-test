@@ -216,3 +216,35 @@ ORDER BY
     u.numeric_priority DESC,
     c.arrived_at        ASC,
     c.sequence_number   ASC;
+
+-- -----------------------------------------------------------------------------
+-- Query exemplo reproduzindo a ordenação diretamente, sem depender da VIEW.
+-- Útil para explicar a regra em relatórios, auditoria ou troubleshooting:
+--
+-- SELECT
+--     e.queue_id,
+--     p.name AS patient_name,
+--     e.urgency_code AS declared_urgency,
+--     CASE
+--         WHEN p.age < 18 AND e.urgency_code = 'CRÍTICA' THEN 'CRÍTICA'
+--         WHEN p.age < 18 AND e.urgency_code = 'ALTA'    THEN 'CRÍTICA'
+--         WHEN p.age < 18 AND e.urgency_code = 'MÉDIA'   THEN 'ALTA'
+--         WHEN p.age < 18 AND e.urgency_code = 'BAIXA'   THEN 'MÉDIA'
+--         WHEN p.age >= 60 AND e.urgency_code = 'MÉDIA'  THEN 'ALTA'
+--         ELSE e.urgency_code
+--     END AS adjusted_urgency,
+--     e.arrived_at,
+--     e.sequence_number
+-- FROM triage_queue_entries e
+-- JOIN patients p ON p.id = e.patient_id
+-- JOIN urgency_levels u ON u.code = CASE
+--     WHEN p.age < 18 AND e.urgency_code = 'CRÍTICA' THEN 'CRÍTICA'
+--     WHEN p.age < 18 AND e.urgency_code = 'ALTA'    THEN 'CRÍTICA'
+--     WHEN p.age < 18 AND e.urgency_code = 'MÉDIA'   THEN 'ALTA'
+--     WHEN p.age < 18 AND e.urgency_code = 'BAIXA'   THEN 'MÉDIA'
+--     WHEN p.age >= 60 AND e.urgency_code = 'MÉDIA'  THEN 'ALTA'
+--     ELSE e.urgency_code
+-- END
+-- WHERE e.queue_id = :queue_id
+-- ORDER BY u.numeric_priority DESC, e.arrived_at ASC, e.sequence_number ASC;
+-- -----------------------------------------------------------------------------

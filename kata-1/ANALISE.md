@@ -209,6 +209,81 @@ No `verify.py --mode demo`, a demonstração foi separada por cenário auditáve
 
 Trade-off: um exemplo único grande é bom para mostrar o sistema funcionando, mas cenários separados são melhores para provar que cada regra funciona por si só.
 
+## Forma de Apresentação da Saída Executável
+
+Além de estar correta, a demonstração precisava parecer **execução real** e não texto explicativo corrido. Por isso a saída foi reorganizada em blocos previsíveis por caso:
+
+- cabeçalho do caso;
+- tabela do cenário de entrada;
+- tabela da fila calculada ou da validação de ajustes;
+- conferência entre esperado e obtido;
+- status final do caso.
+
+### Por que isso foi importante
+
+- facilita leitura em terminal;
+- reduz sensação de “documentação despejada” no meio da execução;
+- deixa mais claro o que veio da entrada e o que foi calculado pelo algoritmo;
+- aproxima a experiência do que um avaliador espera ao rodar um artefato técnico.
+
+### Trade-off escolhido
+
+Eu poderia deixar a saída extremamente curta, quase só com `OK/FAIL`, mas isso esconderia evidência demais. Também poderia deixar tudo explicadinho em prosa, mas a execução perderia ritmo. O meio-termo escolhido foi:
+
+- modo resumido no fluxo completo;
+- modo detalhado em `--mode demo`, com estrutura visual mais operacional.
+
+## Modo Exploratório Adicional
+
+Além do `verify.py`, adicionei um explorer separado em `explore.py` e uma camada visual na vitrine web para a Kata 1.
+
+### Por que isso entrou
+
+- alguns avaliadores preferem rodar tudo rapidamente e seguir adiante;
+- outros querem cutucar cenários específicos, bordas e percepção de escala;
+- deixar essa exploração fora do fluxo principal evita que a validação normal vire um labirinto de prompts.
+
+### O que o explorer permite
+
+- rodar todos os casos de negócio em sequência;
+- escolher um caso isolado por chave;
+- simular volumes customizados para comparar `batch sort`, `bucket queue` e o cenário contínuo ingênuo.
+- explorar isso também pela vitrine web, com contador, progresso visual e mudança de estratégia conforme o volume.
+
+### Trade-off escolhido
+
+Transformar a validação principal inteira em um assistente interativo seria pior:
+
+- aumentaria atrito para o avaliador que só quer confirmar a entrega;
+- dificultaria automação e repetibilidade;
+- passaria mais sensação de “demo guiada” do que de artefato técnico estável.
+
+Por isso, a escolha foi manter:
+
+- `verify.py` como caminho principal, determinístico e auditável;
+- `explore.py` e a vitrine web como camada opcional de exploração.
+
+### Orçamento de tempo na vitrine web
+
+No começo, a vitrine era apenas uma camada estática de apresentação. Isso mudou quando a simulação de volume passou a pedir uma experiência mais fluida em cargas maiores.
+
+A solução adotada foi híbrida:
+
+- até `2.000` pacientes, a execução acontece no navegador;
+- acima de `2.000`, o frontend delega a medição para uma API local própria do showcase;
+- a interface acompanha o job com polling, mostrando estágio atual, quantidade processada e progresso;
+- se o usuário mexer no slider de novo, a execução anterior é descartada e o contador reinicia.
+
+Trade-off:
+
+- deixar tudo sempre no navegador seria mais “puro”, mas pioraria muito a experiência;
+- empurrar tudo sempre para backend esconderia a fronteira entre o que o browser suporta bem e o que já merece processamento dedicado;
+- manter a vitrine puramente estática seria operacionalmente mais simples, mas limitaria a sensação de execução real.
+
+O meio-termo escolhido foi transformar o showcase em UI + API local de apoio, mas apenas para esse fluxo exploratório. A validação principal continua no terminal, previsível e automatizável.
+
+Para não virar um extra “bonito porém frágil”, a API local do showcase ganhou suíte dedicada em `showcase/test_server.py`. Ela cobre criação de jobs, cancelamento, progresso, endpoints HTTP e bootstrap do servidor, fechando `100%` de cobertura em `showcase/server.py`.
+
 ## Análise de Escalabilidade
 
 ### O que muda com 1 milhão de pacientes
@@ -383,6 +458,126 @@ Motivos:
 - mesmo comando local e no CI
 - menos divergência entre revisão manual e pipeline
 - escopo focado na `kata-1`
+
+## Como Executar
+
+Fluxo direto:
+
+```bash
+python3 -m unittest discover -s kata-1 -p 'test_*.py'
+python3 kata-1/verify.py
+python3 kata-1/verify.py --mode demo
+python3 kata-1/explore.py --list-cases
+```
+
+Fluxo pelo runner:
+
+```bash
+bash scripts/kata.sh kata1 tests
+bash scripts/kata.sh kata1 verify
+bash scripts/kata.sh kata1 demo
+bash scripts/kata.sh kata1 explore
+```
+
+## Exemplo Concreto de Entrada e Saída
+
+### Entrada
+
+| Ordem de entrada | Nome | Idade | Urgência declarada | Chegada | Ajuste aplicado |
+| --- | --- | ---: | --- | --- | --- |
+| 1 | Ana | 35 | BAIXA | 08:00 | permanece `BAIXA` |
+| 2 | Bruno | 65 | MÉDIA | 08:05 | sobe para `ALTA` pela regra 4 |
+| 3 | Carla | 15 | MÉDIA | 08:10 | sobe para `ALTA` pela regra 5 |
+| 4 | Diego | 10 | CRÍTICA | 08:15 | continua `CRÍTICA` (teto) |
+| 5 | Eva | 25 | CRÍTICA | 08:20 | permanece `CRÍTICA` |
+
+### Saída ordenada
+
+| Posição final | Nome | Urgência final | Motivo do desempate |
+| --- | --- | --- | --- |
+| 1 | Diego | CRÍTICA | chegou antes de Eva |
+| 2 | Eva | CRÍTICA | segunda entre os críticos |
+| 3 | Bruno | ALTA | chegou antes de Carla |
+| 4 | Carla | ALTA | mesma urgência final, mas chegou depois |
+| 5 | Ana | BAIXA | menor prioridade |
+
+## FIFO Explícito com Exemplo Numérico
+
+Se três pacientes entram com a mesma urgência final `ALTA` nos horários `08:05`, `08:09` e `08:12`, a saída precisa ser exatamente essa mesma ordem: `08:05 -> 08:09 -> 08:12`.
+
+Se houver empate exato de horário, por exemplo duas entradas `ALTA` ambas às `09:10`, o algoritmo usa a posição original no lote como critério final de desempate. Isso preserva FIFO auditável mesmo quando os timestamps são iguais até o minuto.
+
+## Tabela Comparativa de Abordagens
+
+| Abordagem | Custo principal | Quando usar | Trade-off |
+| --- | --- | --- | --- |
+| Lista + sort em batch | `O(n log n)` | lote fechado, kata atual | mais simples e mais legível |
+| `heapq` / priority queue | inserção `O(log n)` / extração `O(log n)` | fluxo contínuo com retirada frequente | pior legibilidade para explicar FIFO e empate exato |
+| `TriageBucketQueue` com 4 deques | inserção `O(1)` / retirada `O(1)` | operação contínua com poucas prioridades fixas | exige pré-condição de chegada ordenada no bucket |
+| SQL + `ORDER BY`/VIEW | depende de índice e volume | persistência, auditoria, concorrência | adiciona infraestrutura e custo transacional |
+
+## Por Que a Solução Principal Não Usa `heapq`
+
+`heapq` é boa quando a fila está sendo montada e consumida continuamente, mas o problema pedido no enunciado é diferente: recebe um conjunto de pacientes e devolve a fila final já ordenada.
+
+Nesse cenário, `sort` é a escolha mais direta porque:
+
+- o lote inteiro já está disponível;
+- a chave de ordenação fica explícita em uma tupla simples;
+- estabilidade e desempate final ficam fáceis de auditar;
+- não preciso montar uma estrutura incremental para depois extrair tudo novamente.
+
+Por isso deixei `heapq` apenas como alternativa discutida, não como implementação principal.
+
+## `str` vs `Enum` para Urgência
+
+Avaliei migrar a urgência para `Enum`, mas mantive `str` como contrato de entrada.
+
+### Motivo da decisão
+
+- o dataset do enunciado chega como texto;
+- a versão SQL e a vitrine também trafegam rótulos textuais;
+- a função `canonical_urgency()` já centraliza validação e normalização;
+- usar `Enum` aqui aumentaria adaptação de entrada/saída sem melhorar o comportamento observável.
+
+Se o domínio crescesse para múltiplos módulos Python internos, o `Enum` passaria a valer mais a pena como tipo canônico interno.
+
+## Determinismo e Reprodutibilidade
+
+A fila de triagem precisa ser auditável. Duas execuções com a mesma entrada devem produzir exatamente a mesma saída.
+
+Foi por isso que a chave de ordenação final é:
+
+1. prioridade ajustada desc;
+2. horário de chegada asc;
+3. índice original asc.
+
+O terceiro critério é o que garante determinismo mesmo em empate exato. Sem ele, a fila dependeria de detalhes acidentais do lote de entrada ou do banco.
+
+## Limitações Atuais do Modelo
+
+- não há repriorização dinâmica após o paciente entrar na fila;
+- não há cancelamento de entrada;
+- não há múltiplas chegadas concorrentes já persistindo no banco;
+- o timestamp `HH:MM` assume relógio local da clínica, sem timezone;
+- a solução principal continua sendo de lote, não de fila viva.
+
+Essas limitações são aceitáveis para o kata porque o enunciado pede a fila ordenada de uma lista recebida, não um sistema de triagem em tempo real.
+
+## Crescimento do Dataset e Evolução do Banco
+
+Se a fila passar a lidar com volumes muito maiores e consultas paginadas, o próximo passo no banco seria separar dois cenários:
+
+- consulta operacional da fila aberta: índice focado em `queue_id`, `status`, prioridade e chegada;
+- histórico fechado: paginação por data e filtros administrativos.
+
+Em um banco como PostgreSQL, eu consideraria:
+
+- índice parcial para filas abertas (`WHERE status = 'WAITING'`);
+- paginação por cursor em vez de `OFFSET` para listas longas;
+- materialização do ranking ajustado se a regra passasse a ficar mais cara.
+
+Isso evita que o mesmo índice tente servir igualmente bem a fila operacional e os relatórios históricos.
 
 Trade-off: um CI mais amplo cobriria mais coisas, mas esse workflow específico é mais estável e mais coerente com o objetivo imediato do kata.
 
