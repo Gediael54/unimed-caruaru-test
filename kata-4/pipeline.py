@@ -1,21 +1,85 @@
-"""Deterministic CSV reporting pipeline for Kata 4."""
-
 from __future__ import annotations
 
+import argparse
 import csv
 import json
+import os
+import sys
 import unicodedata
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 OUTPUT_DIR = BASE_DIR / "output"
+
+REPORT_WIDTH = 66
+
+
+class _Theme:
+    def header(self, text: str) -> str:
+        raise NotImplementedError
+
+    def muted(self, text: str) -> str:
+        raise NotImplementedError
+
+    def success(self, text: str) -> str:
+        raise NotImplementedError
+
+    def info(self, text: str) -> str:
+        raise NotImplementedError
+
+
+class _AnsiTheme(_Theme):
+    def _wrap(self, text: str, code: str) -> str:
+        return f"\033[{code}m{text}\033[0m"
+
+    def header(self, text: str) -> str:
+        return self._wrap(text, "1;38;5;29")
+
+    def muted(self, text: str) -> str:
+        return self._wrap(text, "2")
+
+    def success(self, text: str) -> str:
+        return self._wrap(text, "32")
+
+    def info(self, text: str) -> str:
+        return self._wrap(text, "36")
+
+
+class _PlainTheme(_Theme):
+    def header(self, text: str) -> str:
+        return text
+
+    def muted(self, text: str) -> str:
+        return text
+
+    def success(self, text: str) -> str:
+        return text
+
+    def info(self, text: str) -> str:
+        return text
+
+
+def _color_is_supported() -> bool:
+    return (
+        sys.stdout.isatty()
+        and os.environ.get("NO_COLOR") is None
+        and os.environ.get("TERM", "") not in ("", "dumb")
+    )
+
+
+def _pick_theme() -> _Theme:
+    available = {True: _AnsiTheme(), False: _PlainTheme()}
+    return available[_color_is_supported()]
+
+
+theme = _pick_theme()
 
 CONSOLIDATED_COLUMNS = [
     "id_pedido",
@@ -123,21 +187,27 @@ def require(row: dict[str, str], field: str) -> str:
 def load_orders(path: Path) -> tuple[list[Order], list[dict[str, str]]]:
     orders: list[Order] = []
     rejected: list[dict[str, str]] = []
+    seen_order_ids: set[str] = set()
 
     for row_number, row in enumerate(read_csv(path), start=2):
         try:
-            parsed_date = normalize_date(require(row, "data_pedido"))
+            order_id = require(row, "id_pedido")
+            parsed_date = normalize_date(row.get("data_pedido"))
             if parsed_date is None:
                 raise ValueError("data_pedido is required")
+            if order_id in seen_order_ids:
+                raise ValueError(f"Duplicate id_pedido: {order_id}")
+
             orders.append(
                 Order(
-                    id_pedido=require(row, "id_pedido"),
+                    id_pedido=order_id,
                     id_cliente=require(row, "id_cliente"),
                     valor_total=parse_money(require(row, "valor_total")),
                     status_pedido=require(row, "status_pedido").lower(),
                     data_pedido=parsed_date,
                 )
             )
+            seen_order_ids.add(order_id)
         except ValueError as exc:
             rejected.append(
                 {"file": path.name, "row": str(row_number), "reason": str(exc)}
@@ -153,6 +223,9 @@ def load_customers(path: Path) -> tuple[dict[str, Customer], list[dict[str, str]
     for row_number, row in enumerate(read_csv(path), start=2):
         try:
             id_cliente = require(row, "id_cliente")
+            if id_cliente in customers:
+                raise ValueError(f"Duplicate id_cliente: {id_cliente}")
+
             customers[id_cliente] = Customer(
                 id_cliente=id_cliente,
                 nome_cliente=require(row, "nome_cliente"),
@@ -174,6 +247,9 @@ def load_deliveries(path: Path) -> tuple[dict[str, Delivery], list[dict[str, str
     for row_number, row in enumerate(read_csv(path), start=2):
         try:
             id_pedido = require(row, "id_pedido")
+            if id_pedido in deliveries:
+                raise ValueError(f"Duplicate id_pedido: {id_pedido}")
+
             deliveries[id_pedido] = Delivery(
                 id_pedido=id_pedido,
                 data_prevista_entrega=normalize_date(row.get("data_prevista_entrega")),
@@ -196,7 +272,7 @@ def calculate_delay(delivery: Delivery | None) -> int | None:
     ):
         return None
 
-    return max((delivery.data_realizada_entrega - delivery.data_prevista_entrega).days, 0)
+    return (delivery.data_realizada_entrega - delivery.data_prevista_entrega).days
 
 
 def build_consolidated_rows(
@@ -266,7 +342,7 @@ def calculate_indicators(
 
     delivered_rows = [row for row in rows if row["data_realizada_entrega"]]
     delayed_rows = [row for row in delivered_rows if int(row["atraso_dias"] or "0") > 0]
-    on_time_rows = [row for row in delivered_rows if int(row["atraso_dias"] or "0") == 0]
+    on_time_rows = [row for row in delivered_rows if int(row["atraso_dias"] or "0") <= 0]
     delivered_count = len(delivered_rows)
 
     order_ids = {order.id_pedido for order in orders}
@@ -336,5 +412,137 @@ def run_pipeline(data_dir: Path = DATA_DIR, output_dir: Path = OUTPUT_DIR) -> di
     return indicators
 
 
+def _print_separator(text: str) -> None:
+    print(theme.muted(text))
+
+
+def _print_heading(title: str) -> None:
+    print(f"  {theme.header(title)}")
+
+
+def _print_path_line(label: str, value: Path | str) -> None:
+    print(f"  {theme.muted(label)}    {value}")
+
+
+@dataclass(frozen=True)
+class _SummaryRenderer:
+    indicators: dict[str, object]
+    data_dir: Path
+    output_dir: Path
+
+    def render(self) -> None:
+        print()
+        self._print_banner()
+        self._print_metadata()
+        self._print_status_totals()
+        self._print_state_tickets()
+        self._print_deliveries()
+        self._print_top_cities()
+        self._print_quality()
+        self._print_footer()
+        print()
+
+    def _print_banner(self) -> None:
+        sep = "=" * REPORT_WIDTH
+        print(theme.header(sep))
+        print(theme.header("  KATA 4 - PIPELINE DE INDICADORES"))
+        print(theme.header(sep))
+
+    def _print_metadata(self) -> None:
+        _print_path_line("Entrada", self.data_dir)
+        _print_path_line("Saida", self.output_dir)
+        _print_path_line("Gerados", "consolidated.csv, indicators.json")
+        _print_separator("-" * REPORT_WIDTH)
+
+    def _print_status_totals(self) -> None:
+        _print_heading("Total de pedidos por status")
+        for status, count in self.indicators["total_orders_by_status"].items():
+            print(f"    {status:<12} {count}")
+        print()
+
+    def _print_state_tickets(self) -> None:
+        _print_heading("Ticket medio por estado")
+        for state, ticket in self.indicators["average_ticket_by_state"].items():
+            print(f"    {state:<4} R$ {ticket}")
+        print()
+
+    def _print_deliveries(self) -> None:
+        _print_heading("Entregas")
+        percentages = self.indicators["delivery_percentages"]
+        print(f"    {theme.success('no prazo')}   {percentages['on_time']}%")
+        print(f"    com atraso  {percentages['delayed']}%")
+        print(f"    atraso medio (dias) {self.indicators['average_delay_days_for_delayed_orders']}")
+        print()
+
+    def _print_top_cities(self) -> None:
+        _print_heading("Top 3 cidades por volume")
+        for idx, entry in enumerate(self.indicators["top_3_cities_by_order_volume"], start=1):
+            print(f"    {idx}. {entry['city']:<16} {entry['orders']} pedido(s)")
+        print()
+
+    def _print_quality(self) -> None:
+        _print_heading("Qualidade dos dados")
+        print(f"    entregas orfas   {self.indicators['orphan_delivery_count']}")
+        print(f"    linhas rejeitadas {self.indicators['rejected_row_count']}")
+
+    def _print_footer(self) -> None:
+        consolidated_path = self.output_dir / "consolidated.csv"
+        indicators_path = self.output_dir / "indicators.json"
+        footer_lines = [
+            theme.success("[OK] Pipeline concluido."),
+            theme.info(f"Consolidado completo em: {consolidated_path}"),
+            theme.info(f"Indicadores em:          {indicators_path}"),
+        ]
+        _print_separator("-" * REPORT_WIDTH)
+        for line in footer_lines:
+            print(f"  {line}")
+
+
+def print_summary(
+    indicators: dict[str, object],
+    *,
+    data_dir: Path = DATA_DIR,
+    output_dir: Path = OUTPUT_DIR,
+) -> None:
+    _SummaryRenderer(
+        indicators=indicators,
+        data_dir=data_dir,
+        output_dir=output_dir,
+    ).render()
+
+
+def _build_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="pipeline",
+        description="Kata 4 - pipeline de indicadores a partir de pedidos, clientes e entregas.",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=DATA_DIR,
+        help="Diretorio com pedidos.csv, clientes.csv e entregas.csv (default: kata-4/data).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=OUTPUT_DIR,
+        help="Diretorio de saida para consolidated.csv e indicators.json (default: kata-4/output).",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Nao imprime o resumo no terminal.",
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _build_argument_parser().parse_args(argv)
+    indicators = run_pipeline(args.data_dir, args.output_dir)
+    if not args.quiet:
+        print_summary(indicators, data_dir=args.data_dir, output_dir=args.output_dir)
+    return 0
+
+
 if __name__ == "__main__":
-    run_pipeline()
+    raise SystemExit(main())

@@ -2,5 +2,5 @@ id_pedido,nome_cliente,cidade_normalizada,estado,valor_total,status_pedido,data_
 P001,Ana Silva,Caruaru,PE,120.50,pago,2026-04-20,2026-04-22,2026-04-22,0,entregue
 P002,Bruno Lima,Recife,PE,89.90,pendente,2026-04-19,2026-04-22,2026-04-24,2,entregue
 P003,Ana Silva,Caruaru,PE,250.00,pago,2026-04-18,2026-04-21,,,pendente
-P004,Clara Souza,Sao Paulo,SP,300.00,cancelado,2026-04-18,2026-04-20,2026-04-19,0,entregue
+P004,Clara Souza,Sao Paulo,SP,300.00,cancelado,2026-04-18,2026-04-20,2026-04-19,-1,entregue
 P005,Daniel Costa,Maceio,AL,45.75,pago,2026-04-17,,,,sem_entrega
