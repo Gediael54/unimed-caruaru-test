@@ -8,5 +8,10 @@ export default defineConfig({
     proxy: {
       "/tasks": "http://localhost:5000"
     }
+  },
+  test: {
+    environment: "jsdom",
+    setupFiles: "./src/test/setup.ts",
+    clearMocks: true
   }
 });
