@@ -400,12 +400,6 @@ class ConstantsSanityTests(unittest.TestCase):
 
 
 class SqlSchemaIntegrationTests(unittest.TestCase):
-    """Loads `schema.sql` into in-memory SQLite and verifies the VIEW output.
-
-    Proves that `order_triage_queue` (Python) and `v_triage_queue_ordered`
-    (SQL) agree byte-for-byte on ordering for the same input set.
-    """
-
     def setUp(self) -> None:
         self.conn = sqlite3.connect(":memory:")
         self.conn.row_factory = sqlite3.Row
