@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Unimed Caruaru · Showcase do Projeto</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Teste Técnico Unimed Caruaru</p>
+          <h1>Apresentação web opcional do projeto</h1>
+          <p class="hero-text">
+            Esta vitrine não substitui a execução manual pelo terminal. Ela existe para
+            facilitar a revisão do conjunto: o que foi entregue, como executar, onde está a
+            análise e quais trade-offs foram escolhidos.
+          </p>
+          <div class="hero-actions">
+            <button class="copy-button" data-command="bash scripts/kata.sh">
+              Copiar runner principal
+            </button>
+            <button class="copy-button secondary" data-command="bash scripts/kata.sh showcase serve">
+              Copiar comando da vitrine
+            </button>
+          </div>
+        </div>
+
+        <aside class="hero-panel">
+          <div class="panel-card">
+            <span class="panel-label">Exploração</span>
+            <strong>3 caminhos complementares</strong>
+            <ul>
+              <li>Runner interativo em `bash`</li>
+              <li>Comandos manuais por kata</li>
+              <li>Showcase web como camada de apresentação</li>
+            </ul>
+          </div>
+
+          <div class="panel-card">
+            <span class="panel-label">Status</span>
+            <strong>4 katas entregues</strong>
+            <p>Algoritmo, full-stack, análise arquitetural e pipeline determinístico.</p>
+          </div>
+        </aside>
+      </header>
+
+      <main class="content-grid">
+        <section class="surface wide">
+          <div class="section-heading">
+            <p class="eyebrow">Como explorar</p>
+            <h2>Terminal continua sendo o caminho principal</h2>
+          </div>
+          <div class="mode-grid" id="mode-grid"></div>
+        </section>
+
+        <section class="surface wide">
+          <div class="section-heading">
+            <p class="eyebrow">Visão Geral</p>
+            <h2>Katas e artefatos</h2>
+          </div>
+          <div class="kata-grid" id="kata-grid"></div>
+        </section>
+
+        <section class="surface wide">
+          <div class="section-heading">
+            <p class="eyebrow">Exploração Interativa</p>
+            <h2>Playground visual da Kata 1</h2>
+            <p class="section-text">
+              Esta área existe para dar sensação de execução real sem trocar a fonte de verdade.
+              O terminal continua sendo o caminho principal; aqui a ideia é explorar casos e volume
+              de forma rápida e visual.
+            </p>
+          </div>
+          <div class="explore-grid">
+            <article class="explorer-card">
+              <div class="explorer-header">
+                <h3>Casos de negócio</h3>
+                <p>Escolha um cenário e veja entrada, resultado calculado e validação.</p>
+              </div>
+              <div class="case-tab-row" id="case-tab-row"></div>
+              <div class="output-stack" id="case-output"></div>
+            </article>
+
+            <article class="explorer-card">
+              <div class="explorer-header">
+                <h3>Simulação de volume</h3>
+                <p>
+                  Até <strong>2.000</strong> pacientes a simulação roda no navegador. Acima disso,
+                  a vitrine envia o trabalho para uma API local própria e sincroniza o contador com
+                  o andamento do job em background.
+                </p>
+              </div>
+              <label class="range-label" for="volume-range">Quantidade de pacientes</label>
+              <div class="range-row">
+                <input id="volume-range" type="range" min="100" max="20000" step="100" value="2000" />
+                <strong id="volume-value">2000</strong>
+              </div>
+              <p class="range-hint">
+                Até <strong>2.000</strong> o cálculo é local. Acima disso, a UI delega o trabalho
+                para a API local do showcase. Se você mexer no slider novamente, o job anterior é
+                descartado e o contador reinicia.
+              </p>
+              <div class="output-stack" id="volume-output"></div>
+              <button class="copy-button secondary" data-command="bash scripts/kata.sh kata1 explore">
+                Copiar comando do explorer em bash
+              </button>
+            </article>
+          </div>
+        </section>
+
+        <section class="surface">
+          <div class="section-heading">
+            <p class="eyebrow">Análises</p>
+            <h2>Onde está o raciocínio</h2>
+          </div>
+          <div class="analysis-list" id="analysis-list"></div>
+        </section>
+
+        <section class="surface">
+          <div class="section-heading">
+            <p class="eyebrow">Trade-offs</p>
+            <h2>Decisões conscientes</h2>
+          </div>
+          <div class="tradeoff-list" id="tradeoff-list"></div>
+        </section>
+
+        <section class="surface wide">
+          <div class="section-heading">
+            <p class="eyebrow">Comandos rápidos</p>
+            <h2>Execução direta sem navegar no menu</h2>
+          </div>
+          <div class="command-grid" id="command-grid"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="badge-template">
+      <span class="badge"></span>
+    </template>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
