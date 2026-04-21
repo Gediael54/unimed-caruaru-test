@@ -1,5 +1,11 @@
 # Kata 3 — Sistema Legado em Colapso
 
+## TL;DR
+
+- **Top 3 prioridades**: (1) idempotência em `POST /orders` para eliminar duplicidade, (2) diagnóstico e correção da consulta lenta (p95 8–12 s → ≤ 500 ms), (3) testes de caracterização para virar rede de segurança dos próximos passos.
+- **Decisão de arquitetura**: refatoração incremental do módulo de 4.000 linhas, não reescrita — time saturado, sem testes, e a reescrita só prova funcionar ao substituir 100%.
+- **Ganhos mensuráveis**: zero duplicados em relatório diário por 2 semanas, p95 ≤ 500 ms sob pico, cobertura ≥ 70% nos fluxos críticos e 100% dos deploys via pipeline com revisão.
+
 Plano técnico organizado nas quatro seções exigidas pelo teste: diagnóstico problema a problema, plano de ação para as três maiores prioridades, decisão de arquitetura argumentada e requisitos não funcionais ignorados com métricas de monitoramento.
 
 ## Seção 1 — Diagnóstico
@@ -65,6 +71,33 @@ Escolho as três ações que mais reduzem risco imediato e habilitam as demais: 
   - Zero pedidos duplicados detectados no relatório diário durante duas semanas seguidas.
   - Logs mostram chaves idempotentes colidindo (retry funcionando corretamente) sem criar novo registro.
   - Teste de integração automatizado comprova que duas requisições idênticas geram um único pedido.
+- **Schema proposto** (`order_idempotency_keys`):
+
+```sql
+CREATE TABLE order_idempotency_keys (
+    idempotency_key  VARCHAR(80)  NOT NULL,
+    client_id        UUID         NOT NULL,
+    order_id         UUID         NOT NULL,
+    request_hash     CHAR(64)     NOT NULL,  -- SHA-256 do payload normalizado
+    response_status  SMALLINT     NOT NULL,
+    response_body    JSONB        NOT NULL,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    expires_at       TIMESTAMPTZ  NOT NULL, -- TTL (ex.: created_at + 24h)
+    CONSTRAINT pk_order_idempotency_keys PRIMARY KEY (client_id, idempotency_key),
+    CONSTRAINT fk_order_idempotency_keys_order
+        FOREIGN KEY (order_id) REFERENCES orders (id)
+);
+
+CREATE INDEX ix_order_idempotency_keys_expires_at
+    ON order_idempotency_keys (expires_at);
+```
+
+Regra: ao chegar um `POST /orders` com `Idempotency-Key`, a aplicação procura
+por `(client_id, idempotency_key)`. Se existir e `request_hash` bater, devolve
+a mesma `(response_status, response_body)` sem criar pedido novo; se bater a
+chave mas o payload divergir, responde `409 Conflict`; se não existir, cria
+o pedido dentro da mesma transação que insere a linha aqui. Uma rotina varre
+`expires_at` para limpar chaves antigas.
 
 ### Ação 2 — Investigar e mitigar a consulta lenta (P0)
 
@@ -96,6 +129,19 @@ Escolho as três ações que mais reduzem risco imediato e habilitam as demais: 
 ## Seção 3 — Decisão de Arquitetura
 
 **Escolho a Opção A — Refatoração incremental.**
+
+### Matriz de decisão — refatoração × reescrita
+
+| Critério | Refatoração incremental | Reescrita do zero |
+| --- | --- | --- |
+| Risco de regressão no curto prazo | Baixo — cada passo mantém estado funcional anterior | Alto — só prova funcionar quando substitui 100% |
+| Rede de segurança necessária | Combina com testes de caracterização (Ação 3) | Exige paridade comportamental completa antes do corte |
+| Esforço do time | Absorve em ciclos curtos ao lado de manutenção | Projeto paralelo; compete com manutenção de um time já saturado |
+| Entrega contínua de valor | Sim — cada módulo extraído já agrega valor | Só no "big bang" final |
+| Redescoberta de regras escondidas | Cedo e barato, um módulo por vez | Tarde, quando o novo design já foi fechado |
+| Reversibilidade | Alta — reverter um passo é barato | Baixa — reverter a reescrita inteira é caro |
+| Janela até primeiro ganho visível | Dias a semanas | Meses |
+| Risco de "second system" divergente | Baixo | Alto — código novo e antigo coexistem |
 
 **Argumentação**:
 
@@ -147,3 +193,13 @@ Cada RNF identificado vem acompanhado de uma **métrica mensurável** para monit
 
 - **Por que está comprometido**: hotfix foi aplicado diretamente em produção sem PR e sem teste — processo frágil e não auditável.
 - **Métrica mensurável**: percentual de deploys feitos via pipeline com revisão (meta = 100%) e percentual de mudanças com rollback documentado (meta = 100%).
+
+## Seção 5 — Quadro Executivo de Execução
+
+| Prioridade | Horizonte | Ação | Dependências | Rollback |
+| --- | --- | --- | --- | --- |
+| P0 | 24h | Bloquear duplicidade com idempotência e restrição única | ajuste no endpoint de criação, apoio do time cliente para reutilizar chave | remover validação nova e desabilitar uso da chave temporariamente |
+| P0 | 24h - 7d | Mitigar lentidão do endpoint de pedidos com análise real de query e correção mínima segura | acesso a banco, plano de execução e janela controlada de deploy | remover índice novo ou desfazer alteração de query/materialização |
+| P1 | 7d | Criar testes de caracterização para criação de pedido e consulta crítica | ambiente de teste com banco equivalente e CI existente | rollback simples por revert do pipeline de teste, sem impacto funcional |
+| P1 | 7d - 30d | Fechar governança de mudança: PR obrigatório, pipeline e gate de deploy | alinhamento do time e permissão de branch | desabilitar bloqueio temporariamente em caso de incidente, com registro formal |
+| P2 | 30d | Iniciar refatoração incremental do módulo de 4.000 linhas | testes de caracterização mínimos e mapeamento de fronteiras do módulo | reverter módulo extraído por feature flag ou retorno ao adaptador anterior |
