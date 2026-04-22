@@ -1,6 +1,6 @@
-id_pedido,id_cliente,valor_total,status_pedido,data_pedido
-P001,C001,"120,50",pago,20/04/2026
-P002,C002,89.90,pendente,2026-04-19
-P003,C001,"250,00",pago,2026-04-18T09:30:00
-P004,C003,300,cancelado,18/04/2026
-P005,C004,"45,75",pago,2026-04-17
+id_pedido,data_pedido,id_cliente,valor_total,status
+P001,20/04/2026,C001,"120,50",pago
+P002,2026-04-19,C002,89.90,pendente
+P003,2026-04-18T09:30:00,C001,"250,00",pago
+P004,18/04/2026,C003,300,cancelado
+P005,2026-04-17,C004,"45,75",pago
