@@ -14,6 +14,14 @@ Duplicidades de `id_pedido` e `id_cliente` não são sobrescritas silenciosament
 
 Nomes de cidade são aparados, normalizados sem acentos, com espaços colapsados e em title case antes do agrupamento. Por exemplo, `Maceió` vira `Maceio`.
 
+Os arquivos de exemplo seguem literalmente o contrato do enunciado:
+
+- `pedidos.csv`: `id_pedido`, `data_pedido`, `id_cliente`, `valor_total`, `status`;
+- `clientes.csv`: `id_cliente`, `nome`, `cidade`, `estado`, `data_cadastro`;
+- `entregas.csv`: `id_entrega`, `id_pedido`, `data_prevista`, `data_realizada`, `status_entrega`.
+
+Internamente, o consolidado continua projetando os campos pedidos na saída (`nome_cliente`, `status_pedido`, `data_prevista_entrega`, `data_realizada_entrega`). O parser também aceita aliases da versão anterior para manter retrocompatibilidade da demonstração.
+
 ## Idempotência
 
 O pipeline é idempotente para os mesmos arquivos de entrada. Ele lê apenas os três CSVs de origem e sobrescreve `consolidated.csv` e `indicators.json` de forma determinística em cada execução.
@@ -76,25 +84,25 @@ bash scripts/kata.sh kata4 all
 `pedidos.csv`
 
 ```csv
-id_pedido,id_cliente,valor_total,status_pedido,data_pedido
-P001,C001,"120,50",pago,20/04/2026
-P002,C002,80.00,pendente,2026-04-19
+id_pedido,data_pedido,id_cliente,valor_total,status
+P001,20/04/2026,C001,"120,50",pago
+P002,2026-04-19,C002,80.00,pendente
 ```
 
 `clientes.csv`
 
 ```csv
-id_cliente,nome_cliente,cidade,estado
-C001,Ana Silva,Caruaru,PE
-C002,Bruno Lima,Maceió,AL
+id_cliente,nome,cidade,estado,data_cadastro
+C001,Ana Silva,Caruaru,PE,2024-01-10
+C002,Bruno Lima,Maceió,AL,2024-02-15
 ```
 
 `entregas.csv`
 
 ```csv
-id_pedido,data_prevista_entrega,data_realizada_entrega,status_entrega
-P001,2026-04-22,2026-04-22,entregue
-P002,2026-04-22,2026-04-24,entregue
+id_entrega,id_pedido,data_prevista,data_realizada,status_entrega
+E001,P001,2026-04-22,2026-04-22,entregue
+E002,P002,2026-04-22,2026-04-24,entregue
 ```
 
 ### Saída consolidada
@@ -126,6 +134,7 @@ P002,Bruno Lima,Maceio,AL,80.00,pendente,2026-04-19,2026-04-22,2026-04-24,2,entr
 - `data_pedido` é obrigatória e a linha é rejeitada se faltar;
 - dinheiro é tratado como `Decimal`, nunca como `float`;
 - cidade é normalizada para chave de agrupamento, não para preservar grafia original;
+- `id_entrega` e `data_cadastro` são aceitos e preservados na fronteira de entrada, mas não entram no consolidado porque o relatório final é por pedido;
 - entrega órfã não cria pedido consolidado;
 - pedido sem cliente é rejeitado na etapa de join;
 - a primeira linha válida vence em caso de duplicidade;
@@ -138,6 +147,7 @@ P002,Bruno Lima,Maceio,AL,80.00,pendente,2026-04-19,2026-04-22,2026-04-24,2,entr
 | datas em formatos mistos | aceitar `DD/MM/YYYY`, `YYYY-MM-DD` e ISO com timestamp | parser fica maior, mas o contrato de entrada realista fica coberto |
 | vírgula BR vs ponto US em dinheiro | aceitar os dois formatos | mais tolerância, porém exige normalização explícita |
 | cidade com e sem acento | agrupar pela forma normalizada sem acento | perde a grafia original no consolidado, mas ganha consistência analítica |
+| colunas extras que não entram na saída (`id_entrega`, `data_cadastro`) | aceitar na entrada e ignorar na projeção final | mantém aderência ao enunciado sem poluir o consolidado |
 | pedido sem cliente correspondente | rejeitar a linha consolidada e registrar motivo | preserva integridade do relatório, mas reduz volume consolidado |
 | entrega órfã | não consolidar; contar e listar nos indicadores | relatório final fica consistente, mas a anomalia precisa ser auditada separadamente |
 | encoding alternativo | manter UTF-8 como contrato de leitura | simplifica o pipeline, mas assume arquivo bem formado na fronteira |
