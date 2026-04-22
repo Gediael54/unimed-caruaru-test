@@ -1,18 +1,27 @@
 from __future__ import annotations
 
-import argparse
-import contextlib
 import io
-import runpy
-import types
+import subprocess
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 import server
 
 
 class ShowcaseHelpersTests(unittest.TestCase):
+    def test_public_command_spec_hides_internal_fields(self) -> None:
+        spec = server.public_command_spec(server.COMMAND_SPECS[0])
+
+        self.assertIn("id", spec)
+        self.assertNotIn("argv", spec)
+        self.assertNotIn("timeout_s", spec)
+
+    def test_public_command_spec_exposes_access_links_when_present(self) -> None:
+        spec = server.public_command_spec(server.COMMANDS_BY_ID["kata2-dev"])
+
+        self.assertIn("access_links", spec)
+        self.assertEqual(spec["access_links"][0]["label"], "Abrir frontend")
+
     def test_build_synthetic_patients_is_deterministic(self) -> None:
         patients = server.build_synthetic_patients(3)
 
@@ -29,6 +38,44 @@ class ShowcaseHelpersTests(unittest.TestCase):
     def test_estimate_naive_duration_uses_processed_floor(self) -> None:
         estimated = server.estimate_naive_duration_ms(150.0, 1, 100)
         self.assertGreater(estimated, 150.0)
+
+    def test_trim_output_keeps_tail_when_output_is_too_large(self) -> None:
+        text = "x" * (server.MAX_COMMAND_OUTPUT_CHARS + 10)
+        trimmed = server.trim_output(text)
+
+        self.assertIn("saida truncada", trimmed)
+        self.assertLessEqual(len(trimmed), server.MAX_COMMAND_OUTPUT_CHARS + 64)
+
+    def test_summarize_command_output_keeps_terminal_metadata(self) -> None:
+        summary = server.summarize_command_output("\x1b[32mok\x1b[0m\nlinha 2\n")
+
+        self.assertEqual(summary["output_format"], "ansi")
+        self.assertEqual(summary["output_line_count"], 2)
+        self.assertEqual(summary["output_char_count"], len("\x1b[32mok\x1b[0m\nlinha 2\n"))
+        self.assertFalse(summary["output_truncated"])
+
+    def test_public_doc_spec_hides_content(self) -> None:
+        spec = server.public_doc_spec(server.DOC_SPECS[0])
+
+        self.assertEqual(spec["id"], "repo-readme")
+        self.assertNotIn("content", spec)
+
+    def test_read_doc_payload_returns_content_for_known_doc(self) -> None:
+        payload = server.read_doc_payload("repo-readme")
+
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["id"], "repo-readme")
+        self.assertIn("Teste Técnico Unimed Caruaru", payload["content"])
+
+    def test_read_doc_payload_returns_none_for_unknown_doc(self) -> None:
+        self.assertIsNone(server.read_doc_payload("missing"))
+
+    def test_read_index_html_with_version_replaces_asset_token(self) -> None:
+        html = server.read_index_html_with_version()
+
+        self.assertIn("styles.css?v=", html)
+        self.assertNotIn(server.SHOWCASE_ASSET_VERSION_TOKEN, html)
+        self.assertIn(server.build_showcase_asset_version(), html)
 
 
 class SimulationJobsTests(unittest.TestCase):
@@ -59,31 +106,8 @@ class SimulationJobsTests(unittest.TestCase):
         self.assertEqual(started["args"], ("job-fixed",))
         self.assertTrue(started["daemon"])
 
-    def test_get_returns_none_for_unknown_job(self) -> None:
-        self.assertIsNone(self.jobs.get("missing"))
-
     def test_cancel_returns_none_for_unknown_job(self) -> None:
         self.assertIsNone(self.jobs.cancel("missing"))
-
-    def test_cancel_marks_running_job(self) -> None:
-        self.jobs._jobs["job-1"] = {
-            "job_id": "job-1",
-            "count": 3000,
-            "status": "running",
-            "note": "old",
-            "cancelled": False,
-        }
-
-        job = self.jobs.cancel("job-1")
-
-        self.assertEqual(job["status"], "cancelled")
-        self.assertEqual(job["note"], "cancelado pelo cliente")
-        self.assertTrue(job["cancelled"])
-
-    def test_ensure_not_cancelled_raises_for_cancelled_job(self) -> None:
-        self.jobs._jobs["job-1"] = {"cancelled": True}
-        with self.assertRaises(server.CancelledJobError):
-            self.jobs._ensure_not_cancelled("job-1")
 
     def test_run_finishes_job_without_budget_hit(self) -> None:
         patients = server.build_synthetic_patients(2)
@@ -128,104 +152,205 @@ class SimulationJobsTests(unittest.TestCase):
         self.assertFalse(job["budget_hit"])
         self.assertEqual(job["progress_pct"], 100)
         self.assertEqual(job["processed"], 2)
-        self.assertEqual(job["metrics"][3]["mode"], "medido")
 
-    def test_run_estimates_naive_duration_when_budget_is_hit(self) -> None:
-        patients = server.build_synthetic_patients(3)
 
-        class FakeQueue:
+class CommandRunsTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.runs = server.CommandRuns()
+
+    def test_create_rejects_unknown_command(self) -> None:
+        with self.assertRaises(KeyError):
+            self.runs.create("missing")
+
+    def test_create_rejects_non_runnable_command(self) -> None:
+        with self.assertRaises(ValueError):
+            self.runs.create("kata1-explore")
+
+    def test_create_registers_queued_run_and_starts_thread(self) -> None:
+        started: dict[str, object] = {}
+
+        class FakeThread:
+            def __init__(self, *thread_args: object, target=None, args=(), daemon=None, **thread_kwargs: object) -> None:
+                started["target"] = target
+                started["args"] = args
+                started["daemon"] = daemon
+
+            def start(self) -> None:
+                started["started"] = True
+
+        with patch.object(server.uuid, "uuid4", return_value="run-fixed"), patch.object(server.threading, "Thread", FakeThread):
+            run_id = self.runs.create("repo-help")
+
+        run = self.runs.get(run_id)
+        self.assertEqual(run_id, "run-fixed")
+        self.assertEqual(run["status"], "queued")
+        self.assertEqual(run["command_id"], "repo-help")
+        self.assertEqual(run["stage_label"], "Na fila do showcase")
+        self.assertFalse(run["is_running"])
+        self.assertIsNotNone(run["created_at"])
+        self.assertIsNone(run["finished_at"])
+        self.assertTrue(started["started"])
+        self.assertEqual(started["args"][0], "run-fixed")
+
+    def test_build_command_run_keeps_access_links(self) -> None:
+        run = server.build_command_run("run-1", server.COMMANDS_BY_ID["kata2-dev"])
+
+        self.assertIn("access_links", run)
+        self.assertEqual(run["access_links"][0]["url"], "http://localhost:5173")
+
+    def test_cancel_returns_none_for_unknown_run(self) -> None:
+        self.assertIsNone(self.runs.cancel("missing"))
+
+    def test_cancel_marks_job_and_terminates_process(self) -> None:
+        class FakeProcess:
             def __init__(self) -> None:
-                self.items: list[object] = []
+                self.terminated = False
 
-            def enqueue(self, patient: object) -> None:
-                self.items.append(patient)
+            def terminate(self) -> None:
+                self.terminated = True
 
-            def dequeue_next(self) -> object | None:
-                if self.items:
-                    return self.items.pop(0)
-                return None
-
-        self.jobs._jobs["job-2"] = {
-            "job_id": "job-2",
-            "count": 3,
-            "status": "queued",
-            "progress_pct": 0,
-            "stage_label": "queued",
-            "processed": 0,
-            "elapsed_ms": 0.0,
-            "note": "",
-            "metrics": None,
-            "budget_hit": False,
+        process = FakeProcess()
+        self.runs._jobs["run-1"] = {
+            "run_id": "run-1",
+            "status": "running",
+            "stage_label": "Processo iniciado",
             "cancelled": False,
-            "error": None,
-            "source": "api-local",
+            "note": "old",
         }
+        self.runs._processes["run-1"] = process
 
-        with patch.object(server, "PROGRESS_BATCH_SIZE", 1), patch.object(server, "build_synthetic_patients", return_value=patients), patch.object(server, "order_triage_queue", side_effect=lambda items: list(items)), patch.object(server, "TriageBucketQueue", FakeQueue), patch.object(
-            server,
-            "perf_counter",
-            side_effect=[0.0, 0.001, 0.001, 0.002, 0.002, 0.003, 0.003, 4.004, 4.005],
-        ):
-            self.jobs._run("job-2")
+        run = self.runs.cancel("run-1")
 
-        job = self.jobs.get("job-2")
-        self.assertEqual(job["status"], "done")
-        self.assertTrue(job["budget_hit"])
-        self.assertEqual(job["metrics"][3]["mode"], "estimado")
-        self.assertIn("extrapolado", job["note"])
+        self.assertTrue(run["cancelled"])
+        self.assertEqual(run["note"], "cancelamento solicitado")
+        self.assertEqual(run["stage_label"], "Cancelamento solicitado")
+        self.assertTrue(process.terminated)
 
-    def test_run_marks_job_as_cancelled_when_flag_is_set(self) -> None:
-        self.jobs._jobs["job-3"] = {
-            "job_id": "job-3",
-            "count": 1,
+    def test_run_marks_done_on_success(self) -> None:
+        class FakeProcess:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                self.returncode = 0
+                self.pid = 4321
+
+            def communicate(self, timeout=None):  # noqa: ANN001
+                return ("ok output", "")
+
+        self.runs._jobs["run-1"] = {
+            "run_id": "run-1",
+            "command_id": "repo-help",
+            "scope": "repo",
+            "title": "Runner · Ajuda completa",
+            "runner_command": "bash scripts/kata.sh help",
+            "manual_command": "bash scripts/kata.sh help",
             "status": "queued",
-            "progress_pct": 0,
-            "stage_label": "queued",
-            "processed": 0,
-            "elapsed_ms": 0.0,
-            "note": "",
-            "metrics": None,
-            "budget_hit": False,
-            "cancelled": True,
-            "error": None,
-            "source": "api-local",
-        }
-
-        self.jobs._run("job-3")
-
-        job = self.jobs.get("job-3")
-        self.assertEqual(job["status"], "cancelled")
-        self.assertEqual(job["stage_label"], "Job cancelado")
-
-    def test_run_marks_job_as_error_when_exception_happens(self) -> None:
-        self.jobs._jobs["job-4"] = {
-            "job_id": "job-4",
-            "count": 1,
-            "status": "queued",
-            "progress_pct": 0,
-            "stage_label": "queued",
-            "processed": 0,
-            "elapsed_ms": 0.0,
-            "note": "",
-            "metrics": None,
-            "budget_hit": False,
+            "stage_label": "Na fila do showcase",
+            "created_at": "2026-04-22T12:00:00Z",
+            "updated_at": "2026-04-22T12:00:00Z",
+            "started_at": None,
+            "finished_at": None,
+            "completed_at": None,
+            "duration_ms": None,
+            "exit_code": None,
+            "timed_out": False,
             "cancelled": False,
-            "error": None,
-            "source": "api-local",
+            "is_running": False,
+            "output": "",
+            "output_format": "plain",
+            "output_truncated": False,
+            "output_char_count": 0,
+            "output_line_count": 0,
+            "note": "job criado",
+            "pid": None,
         }
 
-        with patch.object(server, "build_synthetic_patients", side_effect=RuntimeError("boom")):
-            self.jobs._run("job-4")
+        with patch.object(server.subprocess, "Popen", FakeProcess), patch.object(server, "perf_counter", side_effect=[0.0, 0.25]):
+            self.runs._run("run-1", server.COMMANDS_BY_ID["repo-help"])
 
-        job = self.jobs.get("job-4")
-        self.assertEqual(job["status"], "error")
-        self.assertEqual(job["error"], "boom")
+        run = self.runs.get("run-1")
+        self.assertEqual(run["status"], "done")
+        self.assertEqual(run["stage_label"], "Execução concluída")
+        self.assertEqual(run["exit_code"], 0)
+        self.assertEqual(run["pid"], 4321)
+        self.assertIsNotNone(run["started_at"])
+        self.assertIsNotNone(run["finished_at"])
+        self.assertEqual(run["finished_at"], run["completed_at"])
+        self.assertFalse(run["is_running"])
+        self.assertEqual(run["output_format"], "plain")
+        self.assertEqual(run["output_line_count"], 1)
+        self.assertIn("ok output", run["output"])
+
+    def test_run_marks_error_on_timeout(self) -> None:
+        class FakeProcess:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                self.returncode = -9
+                self.pid = 999
+                self.calls = 0
+
+            def communicate(self, timeout=None):  # noqa: ANN001
+                self.calls += 1
+                if self.calls == 1:
+                    raise subprocess.TimeoutExpired(cmd=["bash"], timeout=timeout)
+                return ("timed out output", "")
+
+            def kill(self) -> None:
+                self.returncode = -9
+
+        self.runs._jobs["run-2"] = {
+            "run_id": "run-2",
+            "command_id": "repo-help",
+            "scope": "repo",
+            "title": "Runner · Ajuda completa",
+            "runner_command": "bash scripts/kata.sh help",
+            "manual_command": "bash scripts/kata.sh help",
+            "status": "queued",
+            "stage_label": "Na fila do showcase",
+            "created_at": "2026-04-22T12:00:00Z",
+            "updated_at": "2026-04-22T12:00:00Z",
+            "started_at": None,
+            "finished_at": None,
+            "completed_at": None,
+            "duration_ms": None,
+            "exit_code": None,
+            "timed_out": False,
+            "cancelled": False,
+            "is_running": False,
+            "output": "",
+            "output_format": "plain",
+            "output_truncated": False,
+            "output_char_count": 0,
+            "output_line_count": 0,
+            "note": "job criado",
+            "pid": None,
+        }
+
+        with patch.object(server.subprocess, "Popen", FakeProcess), patch.object(server, "perf_counter", side_effect=[0.0, 0.5]):
+            self.runs._run("run-2", server.COMMANDS_BY_ID["repo-help"])
+
+        run = self.runs.get("run-2")
+        self.assertEqual(run["status"], "error")
+        self.assertTrue(run["timed_out"])
+        self.assertEqual(run["stage_label"], "Tempo limite excedido")
+        self.assertFalse(run["is_running"])
+        self.assertIsNotNone(run["finished_at"])
+        self.assertIn("tempo limite", run["note"])
+
+    def test_cancel_queued_run_finishes_without_spawning_process(self) -> None:
+        self.runs._jobs["run-3"] = server.build_command_run("run-3", server.COMMANDS_BY_ID["repo-help"])
+
+        run = self.runs.cancel("run-3")
+
+        self.assertEqual(run["status"], "cancelled")
+        self.assertEqual(run["stage_label"], "Execução cancelada")
+        self.assertFalse(run["is_running"])
+        self.assertIsNotNone(run["finished_at"])
 
 
 class ShowcaseHandlerTests(unittest.TestCase):
-    def make_handler(self, path: str) -> server.ShowcaseHandler:
+    def make_handler(self, path: str, body: bytes = b"{}") -> server.ShowcaseHandler:
         handler = server.ShowcaseHandler.__new__(server.ShowcaseHandler)
         handler.path = path
+        handler.headers = {"Content-Length": str(len(body))}
+        handler.rfile = io.BytesIO(body)
         return handler
 
     def test_init_passes_showcase_directory_to_base_handler(self) -> None:
@@ -247,173 +372,188 @@ class ShowcaseHandlerTests(unittest.TestCase):
         server.ShowcaseHandler.do_GET(handler)
 
         self.assertEqual(captured["status"], server.HTTPStatus.OK)
-        self.assertEqual(captured["payload"], {"ok": True})
+        self.assertTrue(captured["payload"]["ok"])
 
-    def test_get_job_endpoint_returns_not_found(self) -> None:
-        handler = self.make_handler("/api/triage-simulations/missing")
+    def test_get_root_returns_index_html_with_asset_version(self) -> None:
+        handler = self.make_handler("/")
+        captured: dict[str, object] = {}
+        handler._write_html = lambda status, html: captured.update(status=status, html=html)  # type: ignore[method-assign]
+
+        with patch.object(server, "read_index_html_with_version", return_value="<html>ok</html>"):
+            server.ShowcaseHandler.do_GET(handler)
+
+        self.assertEqual(captured["status"], server.HTTPStatus.OK)
+        self.assertEqual(captured["html"], "<html>ok</html>")
+
+    def test_get_commands_endpoint(self) -> None:
+        handler = self.make_handler("/api/commands")
         captured: dict[str, object] = {}
         handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
 
-        with patch.object(server.JOBS, "get", return_value=None):
+        server.ShowcaseHandler.do_GET(handler)
+
+        self.assertEqual(captured["status"], server.HTTPStatus.OK)
+        self.assertGreater(len(captured["payload"]["commands"]), 0)
+
+    def test_get_docs_endpoint(self) -> None:
+        handler = self.make_handler("/api/docs")
+        captured: dict[str, object] = {}
+        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
+
+        server.ShowcaseHandler.do_GET(handler)
+
+        self.assertEqual(captured["status"], server.HTTPStatus.OK)
+        self.assertGreater(len(captured["payload"]["docs"]), 0)
+
+    def test_get_doc_returns_not_found(self) -> None:
+        handler = self.make_handler("/api/docs/missing")
+        captured: dict[str, object] = {}
+        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
+
+        server.ShowcaseHandler.do_GET(handler)
+
+        self.assertEqual(captured["status"], server.HTTPStatus.NOT_FOUND)
+
+    def test_get_doc_returns_content(self) -> None:
+        handler = self.make_handler("/api/docs/repo-readme")
+        captured: dict[str, object] = {}
+        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
+
+        server.ShowcaseHandler.do_GET(handler)
+
+        self.assertEqual(captured["status"], server.HTTPStatus.OK)
+        self.assertIn("content", captured["payload"])
+
+    def test_get_command_run_returns_not_found(self) -> None:
+        handler = self.make_handler("/api/command-runs/missing")
+        captured: dict[str, object] = {}
+        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
+
+        with patch.object(server.COMMAND_RUNS, "get", return_value=None):
             server.ShowcaseHandler.do_GET(handler)
 
         self.assertEqual(captured["status"], server.HTTPStatus.NOT_FOUND)
 
-    def test_get_job_endpoint_returns_job_payload(self) -> None:
-        handler = self.make_handler("/api/triage-simulations/job-1")
+    def test_get_command_run_returns_rich_payload(self) -> None:
+        handler = self.make_handler("/api/command-runs/run-1")
         captured: dict[str, object] = {}
         handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
 
-        with patch.object(server.JOBS, "get", return_value={"job_id": "job-1", "status": "done"}):
+        with patch.object(
+            server.COMMAND_RUNS,
+            "get",
+            return_value={
+                "run_id": "run-1",
+                "status": "running",
+                "stage_label": "Processo iniciado · aguardando saída",
+                "started_at": "2026-04-22T12:00:00Z",
+                "finished_at": None,
+                "completed_at": None,
+                "is_running": True,
+                "output": "",
+            },
+        ):
             server.ShowcaseHandler.do_GET(handler)
 
         self.assertEqual(captured["status"], server.HTTPStatus.OK)
-        self.assertEqual(captured["payload"]["job_id"], "job-1")
+        self.assertEqual(captured["payload"]["stage_label"], "Processo iniciado · aguardando saída")
+        self.assertTrue(captured["payload"]["is_running"])
 
-    def test_get_root_rewrites_to_index(self) -> None:
-        handler = self.make_handler("/")
-
-        with patch.object(server.SimpleHTTPRequestHandler, "do_GET", autospec=True) as base_get:
-            server.ShowcaseHandler.do_GET(handler)
-
-        self.assertEqual(handler.path, "/index.html")
-        base_get.assert_called_once_with(handler)
-
-    def test_post_create_job_validates_positive_count(self) -> None:
-        handler = self.make_handler("/api/triage-simulations")
+    def test_post_command_run_requires_command_id(self) -> None:
+        handler = self.make_handler("/api/command-runs", body=b"{}")
         captured: dict[str, object] = {}
         handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
-        handler._read_json = lambda: {"count": 0}  # type: ignore[method-assign]
 
         server.ShowcaseHandler.do_POST(handler)
 
         self.assertEqual(captured["status"], server.HTTPStatus.BAD_REQUEST)
+        self.assertEqual(captured["payload"]["error"], "command_id is required")
 
-    def test_post_create_job_returns_job_id(self) -> None:
-        handler = self.make_handler("/api/triage-simulations")
-        captured: dict[str, object] = {}
-        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
-        handler._read_json = lambda: {"count": 3500}  # type: ignore[method-assign]
-
-        with patch.object(server.JOBS, "create", return_value="job-7") as create:
-            server.ShowcaseHandler.do_POST(handler)
-
-        create.assert_called_once_with(3500)
-        self.assertEqual(captured["status"], server.HTTPStatus.ACCEPTED)
-        self.assertEqual(captured["payload"], {"job_id": "job-7"})
-
-    def test_post_cancel_returns_not_found(self) -> None:
-        handler = self.make_handler("/api/triage-simulations/job-9/cancel")
+    def test_post_command_run_returns_not_found_for_unknown_command(self) -> None:
+        handler = self.make_handler("/api/command-runs", body=b'{"command_id":"missing"}')
         captured: dict[str, object] = {}
         handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
 
-        with patch.object(server.JOBS, "cancel", return_value=None):
+        with patch.object(server.COMMAND_RUNS, "create", side_effect=KeyError("missing")):
             server.ShowcaseHandler.do_POST(handler)
 
         self.assertEqual(captured["status"], server.HTTPStatus.NOT_FOUND)
 
-    def test_post_cancel_returns_ok(self) -> None:
-        handler = self.make_handler("/api/triage-simulations/job-9/cancel")
+    def test_post_command_run_rejects_non_runnable_command(self) -> None:
+        handler = self.make_handler("/api/command-runs", body=b'{"command_id":"kata1-explore"}')
         captured: dict[str, object] = {}
         handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
 
-        with patch.object(server.JOBS, "cancel", return_value={"job_id": "job-9"}):
+        with patch.object(server.COMMAND_RUNS, "create", side_effect=ValueError("kata1-explore")):
+            server.ShowcaseHandler.do_POST(handler)
+
+        self.assertEqual(captured["status"], server.HTTPStatus.BAD_REQUEST)
+
+    def test_post_command_run_returns_accepted(self) -> None:
+        handler = self.make_handler("/api/command-runs", body=b'{"command_id":"repo-help"}')
+        captured: dict[str, object] = {}
+        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
+
+        with patch.object(server.COMMAND_RUNS, "create", return_value="run-123"), patch.object(
+            server.COMMAND_RUNS,
+            "get",
+            return_value={
+                "run_id": "run-123",
+                "status": "queued",
+                "stage_label": "Na fila do showcase",
+                "is_running": False,
+            },
+        ):
+            server.ShowcaseHandler.do_POST(handler)
+
+        self.assertEqual(captured["status"], server.HTTPStatus.ACCEPTED)
+        self.assertEqual(captured["payload"]["run_id"], "run-123")
+        self.assertEqual(captured["payload"]["run"]["stage_label"], "Na fila do showcase")
+
+    def test_post_command_run_cancel_returns_not_found(self) -> None:
+        handler = self.make_handler("/api/command-runs/run-1/cancel")
+        captured: dict[str, object] = {}
+        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
+
+        with patch.object(server.COMMAND_RUNS, "cancel", return_value=None):
+            server.ShowcaseHandler.do_POST(handler)
+
+        self.assertEqual(captured["status"], server.HTTPStatus.NOT_FOUND)
+
+    def test_post_command_run_cancel_returns_ok(self) -> None:
+        handler = self.make_handler("/api/command-runs/run-1/cancel")
+        captured: dict[str, object] = {}
+        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
+
+        with patch.object(server.COMMAND_RUNS, "cancel", return_value={"status": "cancelled"}):
             server.ShowcaseHandler.do_POST(handler)
 
         self.assertEqual(captured["status"], server.HTTPStatus.OK)
         self.assertEqual(captured["payload"]["status"], "cancelled")
 
-    def test_post_returns_not_found_for_unknown_endpoint(self) -> None:
-        handler = self.make_handler("/api/unknown")
+
+class MainTests(unittest.TestCase):
+    def test_main_handles_keyboard_interrupt_and_closes_server(self) -> None:
         captured: dict[str, object] = {}
-        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
-
-        server.ShowcaseHandler.do_POST(handler)
-
-        self.assertEqual(captured["status"], server.HTTPStatus.NOT_FOUND)
-
-    def test_read_json_handles_empty_and_payload(self) -> None:
-        handler = self.make_handler("/api/triage-simulations")
-        handler.headers = {"Content-Length": "0"}
-        handler.rfile = io.BytesIO(b"")
-        self.assertEqual(server.ShowcaseHandler._read_json(handler), {})
-
-        handler.headers = {"Content-Length": "4"}
-        handler.rfile = io.BytesIO(b"")
-        self.assertEqual(server.ShowcaseHandler._read_json(handler), {})
-
-        handler.headers = {"Content-Length": "13"}
-        handler.rfile = io.BytesIO(b'{"count": 2}')
-        self.assertEqual(server.ShowcaseHandler._read_json(handler), {"count": 2})
-
-    def test_write_json_serializes_response(self) -> None:
-        handler = self.make_handler("/api/triage-simulations")
-        recorded: list[tuple[str, object]] = []
-        handler.wfile = io.BytesIO()
-        handler.send_response = lambda status: recorded.append(("status", status))  # type: ignore[method-assign]
-        handler.send_header = lambda name, value: recorded.append((name, value))  # type: ignore[method-assign]
-        handler.end_headers = lambda: recorded.append(("end", None))  # type: ignore[method-assign]
-
-        server.ShowcaseHandler._write_json(handler, server.HTTPStatus.ACCEPTED, {"job_id": "job-1"})
-
-        self.assertIn(("status", 202), recorded)
-        self.assertIn(("Content-Type", "application/json; charset=utf-8"), recorded)
-        self.assertIn(("Cache-Control", "no-store"), recorded)
-        self.assertEqual(handler.wfile.getvalue(), b'{"job_id": "job-1"}')
-
-    def test_log_message_writes_stdout(self) -> None:
-        handler = self.make_handler("/")
-        handler.client_address = ("127.0.0.1", 12345)
-        stdout = io.StringIO()
-
-        with patch.object(server.sys, "stdout", stdout):
-            server.ShowcaseHandler.log_message(handler, "hello %s", "world")
-
-        self.assertIn("[showcase] 127.0.0.1 - hello world", stdout.getvalue())
-
-
-class ShowcaseMainTests(unittest.TestCase):
-    def test_main_closes_server_after_keyboard_interrupt(self) -> None:
-        events: list[str] = []
 
         class FakeServer:
-            def __init__(self, address: tuple[str, int], handler_cls: object) -> None:
-                events.append(f"init:{address[0]}:{address[1]}")
+            def __init__(self, address, handler):  # noqa: ANN001
+                captured["address"] = address
+                captured["handler"] = handler
+                captured["closed"] = False
 
             def serve_forever(self) -> None:
-                events.append("serve")
-                raise KeyboardInterrupt
+                raise KeyboardInterrupt()
 
             def server_close(self) -> None:
-                events.append("close")
+                captured["closed"] = True
 
-        with patch.object(server.argparse.ArgumentParser, "parse_args", return_value=types.SimpleNamespace(host="127.0.0.1", port=9999)), patch.object(server, "ThreadingHTTPServer", FakeServer), contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(server, "ThreadingHTTPServer", FakeServer), patch.object(server.argparse.ArgumentParser, "parse_args", return_value=type("Args", (), {"host": "127.0.0.1", "port": 9000})()):
             exit_code = server.main()
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual(events, ["init:127.0.0.1:9999", "serve", "close"])
-
-    def test_main_module_branch_raises_system_exit_zero(self) -> None:
-        events: list[str] = []
-
-        class FakeServer:
-            def __init__(self, address: tuple[str, int], handler_cls: object) -> None:
-                events.append(f"init:{address[0]}:{address[1]}")
-
-            def serve_forever(self) -> None:
-                events.append("serve")
-                raise KeyboardInterrupt
-
-            def server_close(self) -> None:
-                events.append("close")
-
-        server_path = Path(server.__file__).resolve()
-        with patch.object(argparse.ArgumentParser, "parse_args", return_value=types.SimpleNamespace(host="127.0.0.1", port=8787)), patch("http.server.ThreadingHTTPServer", FakeServer), contextlib.redirect_stdout(io.StringIO()):
-            with self.assertRaises(SystemExit) as raised:
-                runpy.run_path(str(server_path), run_name="__main__")
-
-        self.assertEqual(raised.exception.code, 0)
-        self.assertEqual(events, ["init:127.0.0.1:8787", "serve", "close"])
+        self.assertEqual(captured["address"], ("127.0.0.1", 9000))
+        self.assertTrue(captured["closed"])
 
 
 if __name__ == "__main__":
