@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
+import subprocess
 import sys
 import threading
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -27,6 +29,395 @@ HOST = "127.0.0.1"
 PORT = 8787
 SERVER_NAIVE_BUDGET_MS = 3_000
 PROGRESS_BATCH_SIZE = 25
+MAX_COMMAND_OUTPUT_CHARS = 20_000
+ANSI_ESCAPE_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+SHOWCASE_ASSET_VERSION_TOKEN = "__SHOWCASE_ASSET_VERSION__"
+SHOWCASE_ASSET_PATHS = (
+    "index.html",
+    "styles.css",
+    "app.js",
+    "js/catalog.js",
+    "js/core.js",
+    "js/render.js",
+    "js/explorer.js",
+    "js/events.js",
+)
+
+
+DOC_SPECS = [
+    {"id": "repo-readme", "scope": "repo", "title": "README raiz", "path": "README.md"},
+    {"id": "kata1-analysis", "scope": "kata-1", "title": "Kata 1 · ANALISE.md", "path": "kata-1/ANALISE.md"},
+    {"id": "kata1-readme", "scope": "kata-1", "title": "Kata 1 · README.md", "path": "kata-1/README.md"},
+    {"id": "kata2-readme", "scope": "kata-2", "title": "Kata 2 · README.md", "path": "kata-2/README.md"},
+    {"id": "kata2-requisitos", "scope": "kata-2", "title": "Kata 2 · REQUISITOS.md", "path": "kata-2/REQUISITOS.md"},
+    {"id": "kata2-engenharia", "scope": "kata-2", "title": "Kata 2 · ENGENHARIA.md", "path": "kata-2/ENGENHARIA.md"},
+    {"id": "kata2-testes", "scope": "kata-2", "title": "Kata 2 · TESTES.md", "path": "kata-2/TESTES.md"},
+    {"id": "kata3-plano", "scope": "kata-3", "title": "Kata 3 · PLANO.md", "path": "kata-3/PLANO.md"},
+    {"id": "kata4-analysis", "scope": "kata-4", "title": "Kata 4 · ANALISE.md", "path": "kata-4/ANALISE.md"},
+    {"id": "showcase-readme", "scope": "showcase", "title": "Showcase · README.md", "path": "showcase/README.md"},
+]
+DOCS_BY_ID = {spec["id"]: spec for spec in DOC_SPECS}
+
+
+COMMAND_SPECS = [
+    {
+        "id": "repo-help",
+        "scope": "repo",
+        "title": "Runner · Ajuda completa",
+        "description": "Mostra todos os comandos do runner e destaca o que atende ao enunciado.",
+        "runner_command": "bash scripts/kata.sh help",
+        "manual_command": "bash scripts/kata.sh help",
+        "runnable": True,
+        "recommended": True,
+        "artifacts": [],
+        "timeout_s": 60,
+        "argv": ["bash", "scripts/kata.sh", "help"],
+    },
+    {
+        "id": "kata1-demo",
+        "scope": "kata-1",
+        "title": "Kata 1 · Demo executável",
+        "description": "Executa a demonstração principal do algoritmo de triagem.",
+        "runner_command": "bash scripts/kata.sh kata1 demo",
+        "manual_command": "python3 kata-1/verify.py --mode demo",
+        "runnable": True,
+        "recommended": True,
+        "artifacts": [],
+        "timeout_s": 90,
+        "argv": ["bash", "scripts/kata.sh", "kata1", "demo"],
+    },
+    {
+        "id": "kata1-tests",
+        "scope": "kata-1",
+        "title": "Kata 1 · Testes",
+        "description": "Roda a suíte unitária da fila de triagem.",
+        "runner_command": "bash scripts/kata.sh kata1 tests",
+        "manual_command": "python3 -m unittest discover -s kata-1 -p 'test_*.py'",
+        "runnable": True,
+        "recommended": False,
+        "artifacts": [],
+        "timeout_s": 120,
+        "argv": ["bash", "scripts/kata.sh", "kata1", "tests"],
+    },
+    {
+        "id": "kata1-verify",
+        "scope": "kata-1",
+        "title": "Kata 1 · Validação completa",
+        "description": "Roda a validação resumida da kata com os extras de revisão.",
+        "runner_command": "bash scripts/kata.sh kata1 verify",
+        "manual_command": "python3 kata-1/verify.py",
+        "runnable": True,
+        "recommended": False,
+        "artifacts": [],
+        "timeout_s": 180,
+        "argv": ["bash", "scripts/kata.sh", "kata1", "verify"],
+    },
+    {
+        "id": "kata1-explore",
+        "scope": "kata-1",
+        "title": "Kata 1 · Explorer em bash",
+        "description": "Modo interativo no terminal para explorar casos e volumes manualmente.",
+        "runner_command": "bash scripts/kata.sh kata1 explore",
+        "manual_command": "python3 kata-1/explore.py",
+        "runnable": False,
+        "recommended": False,
+        "artifacts": [],
+    },
+    {
+        "id": "kata2-dev",
+        "scope": "kata-2",
+        "title": "Kata 2 · Backend + frontend",
+        "description": "Fluxo integrado para subir o produto da kata em modo desenvolvimento.",
+        "runner_command": "bash scripts/kata.sh kata2 dev",
+        "manual_command": (
+            "Terminal 1:\n"
+            "dotnet run --project kata-2/backend/TaskBoard.Api.csproj --urls http://localhost:5000\n\n"
+            "Terminal 2:\n"
+            "npm --prefix kata-2/frontend run dev"
+        ),
+        "runnable": True,
+        "recommended": True,
+        "artifacts": ["kata-2/artifacts/logs/backend.log"],
+        "access_links": [
+            {"label": "Abrir frontend", "url": "http://localhost:5173"},
+            {"label": "Abrir health", "url": "http://localhost:5000/health"},
+            {"label": "Abrir OpenAPI", "url": "http://localhost:5000/openapi/v1.json"},
+        ],
+        "timeout_s": 1800,
+        "argv": ["bash", "scripts/kata.sh", "kata2", "dev"],
+    },
+    {
+        "id": "kata2-all",
+        "scope": "kata-2",
+        "title": "Kata 2 · Suíte offline",
+        "description": "Executa restore, build, testes e validações do frontend/backend.",
+        "runner_command": "bash scripts/kata.sh kata2 all",
+        "manual_command": (
+            "dotnet restore kata-2/backend.tests/TaskBoard.Api.Tests.csproj\n"
+            "dotnet build kata-2/backend/TaskBoard.Api.csproj --no-restore\n"
+            "dotnet run --project kata-2/backend.tests/TaskBoard.Api.Tests.csproj --no-restore -- backend\n"
+            "dotnet run --project kata-2/backend.tests/TaskBoard.Api.Tests.csproj --no-restore -- api\n"
+            "npm --prefix kata-2/frontend run lint\n"
+            "npm --prefix kata-2/frontend run test\n"
+            "npm --prefix kata-2/frontend run build"
+        ),
+        "runnable": True,
+        "recommended": True,
+        "artifacts": [
+            "kata-2/artifacts/frontend/dist",
+            "kata-2/artifacts/frontend/coverage",
+        ],
+        "timeout_s": 900,
+        "argv": ["bash", "scripts/kata.sh", "kata2", "all"],
+    },
+    {
+        "id": "kata2-backend-tests",
+        "scope": "kata-2",
+        "title": "Kata 2 · Testes do backend",
+        "description": "Roda os testes de regra do backend .NET.",
+        "runner_command": "bash scripts/kata.sh kata2 backend-tests",
+        "manual_command": "dotnet run --project kata-2/backend.tests/TaskBoard.Api.Tests.csproj --no-restore -- backend",
+        "runnable": True,
+        "recommended": False,
+        "artifacts": [],
+        "timeout_s": 300,
+        "argv": ["bash", "scripts/kata.sh", "kata2", "backend-tests"],
+    },
+    {
+        "id": "kata2-api-tests",
+        "scope": "kata-2",
+        "title": "Kata 2 · Testes de contrato HTTP",
+        "description": "Valida o contrato exposto pela API .NET.",
+        "runner_command": "bash scripts/kata.sh kata2 api-tests",
+        "manual_command": "dotnet run --project kata-2/backend.tests/TaskBoard.Api.Tests.csproj --no-restore -- api",
+        "runnable": True,
+        "recommended": False,
+        "artifacts": [],
+        "timeout_s": 300,
+        "argv": ["bash", "scripts/kata.sh", "kata2", "api-tests"],
+    },
+    {
+        "id": "kata2-frontend-lint",
+        "scope": "kata-2",
+        "title": "Kata 2 · Lint do frontend",
+        "description": "Executa ESLint na aplicação React + TypeScript.",
+        "runner_command": "bash scripts/kata.sh kata2 frontend-lint",
+        "manual_command": "npm --prefix kata-2/frontend run lint",
+        "runnable": True,
+        "recommended": False,
+        "artifacts": [],
+        "timeout_s": 180,
+        "argv": ["bash", "scripts/kata.sh", "kata2", "frontend-lint"],
+    },
+    {
+        "id": "kata2-frontend-tests",
+        "scope": "kata-2",
+        "title": "Kata 2 · Testes do frontend",
+        "description": "Roda Vitest na aplicação da Kata 2.",
+        "runner_command": "bash scripts/kata.sh kata2 frontend-tests",
+        "manual_command": "npm --prefix kata-2/frontend run test",
+        "runnable": True,
+        "recommended": False,
+        "artifacts": ["kata-2/artifacts/frontend/coverage"],
+        "timeout_s": 300,
+        "argv": ["bash", "scripts/kata.sh", "kata2", "frontend-tests"],
+    },
+    {
+        "id": "kata2-frontend-build",
+        "scope": "kata-2",
+        "title": "Kata 2 · Build do frontend",
+        "description": "Gera o build da UI em Vite e TypeScript.",
+        "runner_command": "bash scripts/kata.sh kata2 frontend-build",
+        "manual_command": "npm --prefix kata-2/frontend run build",
+        "runnable": True,
+        "recommended": False,
+        "artifacts": ["kata-2/artifacts/frontend/dist"],
+        "timeout_s": 300,
+        "argv": ["bash", "scripts/kata.sh", "kata2", "frontend-build"],
+    },
+    {
+        "id": "kata4-pipeline",
+        "scope": "kata-4",
+        "title": "Kata 4 · Pipeline",
+        "description": "Executa o pipeline e gera o consolidado com indicadores.",
+        "runner_command": "bash scripts/kata.sh kata4 pipeline",
+        "manual_command": "python3 kata-4/pipeline.py",
+        "runnable": True,
+        "recommended": True,
+        "artifacts": [
+            "kata-4/output/consolidated.csv",
+            "kata-4/output/indicators.json",
+        ],
+        "timeout_s": 180,
+        "argv": ["bash", "scripts/kata.sh", "kata4", "pipeline"],
+    },
+    {
+        "id": "kata4-tests",
+        "scope": "kata-4",
+        "title": "Kata 4 · Testes",
+        "description": "Executa a suíte unitária do pipeline.",
+        "runner_command": "bash scripts/kata.sh kata4 tests",
+        "manual_command": "python3 -m unittest discover -s kata-4 -p 'test_*.py'",
+        "runnable": True,
+        "recommended": False,
+        "artifacts": [],
+        "timeout_s": 180,
+        "argv": ["bash", "scripts/kata.sh", "kata4", "tests"],
+    },
+    {
+        "id": "showcase-tests",
+        "scope": "showcase",
+        "title": "Showcase · Testes",
+        "description": "Valida a API local e a lógica da camada visual do repositório.",
+        "runner_command": "bash scripts/kata.sh showcase tests",
+        "manual_command": "python3 -m unittest discover -s showcase -p 'test_*.py'",
+        "runnable": True,
+        "recommended": False,
+        "artifacts": [],
+        "timeout_s": 180,
+        "argv": ["bash", "scripts/kata.sh", "showcase", "tests"],
+    },
+    {
+        "id": "all-validate",
+        "scope": "repo",
+        "title": "Repositório · Validação completa",
+        "description": "Executa o fluxo offline principal das Katas 1, 2 e 4.",
+        "runner_command": "bash scripts/kata.sh all validate",
+        "manual_command": "bash scripts/kata.sh all validate",
+        "runnable": True,
+        "recommended": True,
+        "artifacts": [
+            "kata-2/artifacts/frontend/dist",
+            "kata-4/output",
+        ],
+        "timeout_s": 1_200,
+        "argv": ["bash", "scripts/kata.sh", "all", "validate"],
+    },
+]
+COMMANDS_BY_ID = {spec["id"]: spec for spec in COMMAND_SPECS}
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def trim_output(text: str) -> str:
+    if len(text) <= MAX_COMMAND_OUTPUT_CHARS:
+        return text
+    kept = text[-MAX_COMMAND_OUTPUT_CHARS:]
+    return "[...saida truncada para manter a UI legivel...]\n" + kept
+
+
+def summarize_command_output(text: str) -> dict[str, object]:
+    raw_output = text or ""
+    trimmed_output = trim_output(raw_output)
+    non_empty_lines = [line for line in raw_output.splitlines() if line.strip()]
+    return {
+        "output": trimmed_output,
+        "output_format": "ansi" if ANSI_ESCAPE_RE.search(raw_output) else "plain",
+        "output_truncated": len(trimmed_output) != len(raw_output),
+        "output_char_count": len(raw_output),
+        "output_line_count": len(non_empty_lines),
+    }
+
+
+def build_command_run(run_id: str, spec: dict[str, object]) -> dict[str, object]:
+    created_at = now_iso()
+    return {
+        "run_id": run_id,
+        "command_id": spec["id"],
+        "scope": spec["scope"],
+        "title": spec["title"],
+        "runner_command": spec["runner_command"],
+        "manual_command": spec["manual_command"],
+        "access_links": spec.get("access_links", []),
+        "status": "queued",
+        "stage_label": "Na fila do showcase",
+        "created_at": created_at,
+        "updated_at": created_at,
+        "started_at": None,
+        "finished_at": None,
+        "completed_at": None,
+        "duration_ms": None,
+        "exit_code": None,
+        "timed_out": False,
+        "cancelled": False,
+        "is_running": False,
+        "can_cancel": True,
+        "output_complete": False,
+        "output": "",
+        "output_format": "plain",
+        "output_truncated": False,
+        "output_char_count": 0,
+        "output_line_count": 0,
+        "note": "job criado",
+        "pid": None,
+    }
+
+
+def public_command_spec(spec: dict[str, object]) -> dict[str, object]:
+    return {
+        "id": spec["id"],
+        "scope": spec["scope"],
+        "title": spec["title"],
+        "description": spec["description"],
+        "runner_command": spec["runner_command"],
+        "manual_command": spec["manual_command"],
+        "runnable": spec["runnable"],
+        "recommended": spec.get("recommended", False),
+        "artifacts": spec.get("artifacts", []),
+        "access_links": spec.get("access_links", []),
+    }
+
+
+def public_doc_spec(spec: dict[str, object]) -> dict[str, object]:
+    return {
+        "id": spec["id"],
+        "scope": spec["scope"],
+        "title": spec["title"],
+        "path": spec["path"],
+    }
+
+
+def read_doc_payload(doc_id: str) -> dict[str, object] | None:
+    spec = DOCS_BY_ID.get(doc_id)
+    if spec is None:
+        return None
+
+    file_path = ROOT_DIR / str(spec["path"])
+    if not file_path.exists():
+        return None
+
+    return {
+        "id": spec["id"],
+        "scope": spec["scope"],
+        "title": spec["title"],
+        "path": spec["path"],
+        "content": file_path.read_text(encoding="utf-8"),
+        "updated_at": datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
+    }
+
+
+def build_showcase_asset_version() -> str:
+    mtimes_ns = []
+    for relative_path in SHOWCASE_ASSET_PATHS:
+        file_path = SHOWCASE_DIR / relative_path
+        if not file_path.exists():
+            continue
+        mtimes_ns.append(file_path.stat().st_mtime_ns)
+
+    if not mtimes_ns:
+        return "0"
+
+    return str(max(mtimes_ns))
+
+
+def read_index_html_with_version() -> str:
+    index_path = SHOWCASE_DIR / "index.html"
+    content = index_path.read_text(encoding="utf-8")
+    return content.replace(SHOWCASE_ASSET_VERSION_TOKEN, build_showcase_asset_version())
 
 
 def build_synthetic_patients(count: int) -> list[Patient]:
@@ -248,30 +639,324 @@ class SimulationJobs:
             )
 
 
-JOBS = SimulationJobs()
+class CommandRuns:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._jobs: dict[str, dict[str, object]] = {}
+        self._processes: dict[str, subprocess.Popen[str]] = {}
+
+    def _snapshot(self, run_id: str) -> dict[str, object] | None:
+        job = self._jobs.get(run_id)
+        return dict(job) if job is not None else None
+
+    def _update(self, run_id: str, **fields: object) -> dict[str, object]:
+        job = self._jobs[run_id]
+        fields["updated_at"] = now_iso()
+        job.update(fields)
+        return dict(job)
+
+    def _update_output_snapshot(self, run_id: str, output: str, **fields: object) -> dict[str, object]:
+        return self._update(run_id, **summarize_command_output(output), **fields)
+
+    def create(self, command_id: str) -> str:
+        spec = COMMANDS_BY_ID.get(command_id)
+        if spec is None:
+            raise KeyError(command_id)
+        if not bool(spec.get("runnable")):
+            raise ValueError(command_id)
+
+        run_id = str(uuid.uuid4())
+        with self._lock:
+            self._jobs[run_id] = build_command_run(run_id, spec)
+
+        threading.Thread(target=self._run, args=(run_id, spec), daemon=True).start()
+        return run_id
+
+    def get(self, run_id: str) -> dict[str, object] | None:
+        with self._lock:
+            return self._snapshot(run_id)
+
+    def cancel(self, run_id: str) -> dict[str, object] | None:
+        with self._lock:
+            job = self._jobs.get(run_id)
+            if job is None:
+                return None
+            job["cancelled"] = True
+            process = self._processes.get(run_id)
+            if process is None:
+                finished_at = now_iso()
+                job.update(
+                    status="cancelled",
+                    stage_label="Execução cancelada",
+                    note="cancelamento solicitado antes do processo iniciar",
+                    is_running=False,
+                    can_cancel=False,
+                    output_complete=True,
+                    finished_at=finished_at,
+                    completed_at=finished_at,
+                    duration_ms=job.get("duration_ms") or 0.0,
+                    updated_at=finished_at,
+                )
+            else:
+                job.update(
+                    stage_label="Cancelamento solicitado",
+                    note="cancelamento solicitado",
+                    can_cancel=False,
+                    updated_at=now_iso(),
+                )
+        if process is not None:
+            process.terminate()
+        return self.get(run_id)
+
+    def _stream_process_output(self, run_id: str, process: subprocess.Popen[str], timeout_s: int) -> tuple[str, bool]:
+        stdout = getattr(process, "stdout", None)
+        if stdout is None or not hasattr(process, "wait"):
+            timed_out = False
+            try:
+                output, _ = process.communicate(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                process.kill()
+                output, _ = process.communicate()
+            return output, timed_out
+
+        output_chunks: list[str] = []
+        output_lock = threading.Lock()
+        reader_done = threading.Event()
+
+        def reader() -> None:
+            try:
+                for chunk in iter(stdout.readline, ""):
+                    if chunk == "":
+                        break
+                    with output_lock:
+                        output_chunks.append(chunk)
+                        combined = "".join(output_chunks)
+                    with self._lock:
+                        if run_id in self._jobs:
+                            self._update_output_snapshot(
+                                run_id,
+                                combined,
+                                stage_label="Processo em execução · saída parcial recebida",
+                                note="a API local está publicando o retorno parcial do terminal",
+                                is_running=True,
+                                can_cancel=True,
+                                output_complete=False,
+                            )
+            finally:
+                reader_done.set()
+
+        threading.Thread(target=reader, daemon=True).start()
+
+        timed_out = False
+        try:
+            process.wait(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            process.kill()
+
+        reader_done.wait(timeout=1.5)
+        remainder = ""
+        try:
+            remainder, _ = process.communicate(timeout=1)
+        except Exception:
+            remainder = ""
+
+        with output_lock:
+            if remainder:
+                output_chunks.append(remainder)
+            combined = "".join(output_chunks)
+
+        return combined, timed_out
+
+    def _run(self, run_id: str, spec: dict[str, object]) -> None:
+        start = perf_counter()
+        try:
+            with self._lock:
+                job = self._jobs[run_id]
+                if bool(job.get("cancelled")):
+                    finished_at = now_iso()
+                    job.update(
+                        status="cancelled",
+                        stage_label="Execução cancelada",
+                        note="cancelamento solicitado antes do processo iniciar",
+                        is_running=False,
+                        can_cancel=False,
+                        output_complete=True,
+                        finished_at=finished_at,
+                        completed_at=finished_at,
+                        duration_ms=0.0,
+                        updated_at=finished_at,
+                    )
+                    return
+
+                started_at = now_iso()
+                job.update(
+                    status="running",
+                    stage_label="Preparando processo local",
+                    started_at=started_at,
+                    note="executando comando permitido do catálogo",
+                    is_running=True,
+                    can_cancel=True,
+                    output_complete=False,
+                    updated_at=started_at,
+                )
+
+            process = subprocess.Popen(
+                spec["argv"],
+                cwd=str(ROOT_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            with self._lock:
+                self._processes[run_id] = process
+                self._update(
+                    run_id,
+                    pid=process.pid,
+                    stage_label="Processo iniciado · aguardando saída",
+                )
+
+            output, timed_out = self._stream_process_output(
+                run_id,
+                process,
+                int(spec["timeout_s"]),
+            )
+
+            duration_ms = (perf_counter() - start) * 1000
+            finished_at = now_iso()
+            with self._lock:
+                job = self._jobs[run_id]
+                final_fields: dict[str, object] = {
+                    "finished_at": finished_at,
+                    "completed_at": finished_at,
+                    "duration_ms": duration_ms,
+                    "exit_code": process.returncode,
+                    "timed_out": timed_out,
+                    "is_running": False,
+                    "can_cancel": False,
+                    "output_complete": True,
+                    **summarize_command_output(output),
+                }
+                if timed_out:
+                    final_fields.update(
+                        status="error",
+                        stage_label="Tempo limite excedido",
+                        note="tempo limite excedido durante a execução",
+                    )
+                elif bool(job.get("cancelled")):
+                    final_fields.update(
+                        status="cancelled",
+                        stage_label="Execução cancelada",
+                        note="execução cancelada pelo usuário",
+                    )
+                elif process.returncode == 0:
+                    final_fields.update(
+                        status="done",
+                        stage_label="Execução concluída",
+                        note="execução concluída com sucesso",
+                    )
+                else:
+                    final_fields.update(
+                        status="error",
+                        stage_label="Execução com falha",
+                        note="o comando terminou com código de erro",
+                    )
+                self._update(run_id, **final_fields)
+        except Exception as exc:  # pragma: no cover
+            with self._lock:
+                finished_at = now_iso()
+                output_summary = summarize_command_output(str(exc))
+                self._update(
+                    run_id,
+                    status="error",
+                    stage_label="Falha ao iniciar processo",
+                    finished_at=finished_at,
+                    completed_at=finished_at,
+                    duration_ms=(perf_counter() - start) * 1000,
+                    note="falha ao iniciar a execução do comando",
+                    is_running=False,
+                    can_cancel=False,
+                    output_complete=True,
+                    **output_summary,
+                )
+        finally:
+            with self._lock:
+                self._processes.pop(run_id, None)
+
+
+SIMULATION_JOBS = SimulationJobs()
+COMMAND_RUNS = CommandRuns()
 
 
 class ShowcaseHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, directory=str(SHOWCASE_DIR), **kwargs)
 
+    def end_headers(self) -> None:
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        if parsed.path in {"/", "/index.html"}:
+            self._write_html(HTTPStatus.OK, read_index_html_with_version())
+            return
+
         if parsed.path == "/api/health":
-            self._write_json(HTTPStatus.OK, {"ok": True})
+            self._write_json(
+                HTTPStatus.OK,
+                {
+                    "ok": True,
+                    "showcase": "ready",
+                    "commands": len(COMMAND_SPECS),
+                },
+            )
+            return
+
+        if parsed.path == "/api/commands":
+            self._write_json(
+                HTTPStatus.OK,
+                {"commands": [public_command_spec(spec) for spec in COMMAND_SPECS]},
+            )
+            return
+
+        if parsed.path == "/api/docs":
+            self._write_json(
+                HTTPStatus.OK,
+                {"docs": [public_doc_spec(spec) for spec in DOC_SPECS]},
+            )
+            return
+
+        if parsed.path.startswith("/api/docs/"):
+            doc_id = parsed.path.removeprefix("/api/docs/").strip("/")
+            payload = read_doc_payload(doc_id)
+            if payload is None:
+                self._write_json(HTTPStatus.NOT_FOUND, {"error": "doc not found"})
+                return
+            self._write_json(HTTPStatus.OK, payload)
+            return
+
+        if parsed.path.startswith("/api/command-runs/"):
+            run_id = parsed.path.removeprefix("/api/command-runs/").strip("/")
+            run = COMMAND_RUNS.get(run_id)
+            if run is None:
+                self._write_json(HTTPStatus.NOT_FOUND, {"error": "run not found"})
+                return
+            self._write_json(HTTPStatus.OK, run)
             return
 
         if parsed.path.startswith("/api/triage-simulations/"):
             job_id = parsed.path.removeprefix("/api/triage-simulations/").strip("/")
-            job = JOBS.get(job_id)
+            job = SIMULATION_JOBS.get(job_id)
             if job is None:
                 self._write_json(HTTPStatus.NOT_FOUND, {"error": "job not found"})
                 return
             self._write_json(HTTPStatus.OK, job)
             return
 
-        if parsed.path == "/":
-            self.path = "/index.html"
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
@@ -282,17 +967,49 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
             if count <= 0:
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "count must be positive"})
                 return
-            job_id = JOBS.create(count)
+            job_id = SIMULATION_JOBS.create(count)
             self._write_json(HTTPStatus.ACCEPTED, {"job_id": job_id})
             return
 
         if parsed.path.endswith("/cancel") and parsed.path.startswith("/api/triage-simulations/"):
             job_id = parsed.path.removeprefix("/api/triage-simulations/").removesuffix("/cancel").strip("/")
-            job = JOBS.cancel(job_id)
+            job = SIMULATION_JOBS.cancel(job_id)
             if job is None:
                 self._write_json(HTTPStatus.NOT_FOUND, {"error": "job not found"})
                 return
             self._write_json(HTTPStatus.OK, {"job_id": job_id, "status": "cancelled"})
+            return
+
+        if parsed.path == "/api/command-runs":
+            payload = self._read_json()
+            command_id = str(payload.get("command_id", "")).strip()
+            if not command_id:
+                self._write_json(HTTPStatus.BAD_REQUEST, {"error": "command_id is required"})
+                return
+            try:
+                run_id = COMMAND_RUNS.create(command_id)
+            except KeyError:
+                self._write_json(HTTPStatus.NOT_FOUND, {"error": "command not found"})
+                return
+            except ValueError:
+                self._write_json(HTTPStatus.BAD_REQUEST, {"error": "command is not runnable here"})
+                return
+            self._write_json(
+                HTTPStatus.ACCEPTED,
+                {
+                    "run_id": run_id,
+                    "run": COMMAND_RUNS.get(run_id),
+                },
+            )
+            return
+
+        if parsed.path.endswith("/cancel") and parsed.path.startswith("/api/command-runs/"):
+            run_id = parsed.path.removeprefix("/api/command-runs/").removesuffix("/cancel").strip("/")
+            run = COMMAND_RUNS.cancel(run_id)
+            if run is None:
+                self._write_json(HTTPStatus.NOT_FOUND, {"error": "run not found"})
+                return
+            self._write_json(HTTPStatus.OK, {"run_id": run_id, "status": "cancelled"})
             return
 
         self._write_json(HTTPStatus.NOT_FOUND, {"error": "unsupported endpoint"})
@@ -308,6 +1025,15 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status.value)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _write_html(self, status: HTTPStatus, html: str) -> None:
+        body = html.encode("utf-8")
+        self.send_response(status.value)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
