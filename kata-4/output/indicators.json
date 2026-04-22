@@ -5,6 +5,7 @@
     "PE": "153.47",
     "SP": "300.00"
   },
+  "delivered_without_expected_date": 0,
   "delivery_percentages": {
     "delayed": 33.33,
     "on_time": 66.67
@@ -15,6 +16,7 @@
   ],
   "rejected_row_count": 0,
   "rejected_rows": [],
+  "rejected_rows_truncated": false,
   "top_3_cities_by_order_volume": [
     {
       "city": "Caruaru",
