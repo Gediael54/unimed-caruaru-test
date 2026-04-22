@@ -15,9 +15,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BOX_RULE="=================================================================="
 THIN_RULE="------------------------------------------------------------------"
 SHOWCASE_PORT="8787"
-KATA2_API_PROJECT="kata-2/src/TaskBoard.Api/TaskBoard.Api.csproj"
-KATA2_TESTS_PROJECT="kata-2/tests/TaskBoard.Api.Tests/TaskBoard.Api.Tests.csproj"
-KATA2_WEB_DIR="kata-2/src/TaskBoard.Web"
+KATA2_TESTS_PROJECT="kata-2/backend.tests/TaskBoard.Api.Tests.csproj"
+KATA2_WEB_DIR="kata-2/frontend"
+KATA2_API_PROJECT="kata-2/backend/TaskBoard.Api.csproj"
+KATA2_ARTIFACTS_DIR="kata-2/artifacts"
+KATA2_LOG_FILE="$KATA2_ARTIFACTS_DIR/logs/backend.log"
 
 # ---------------------------------------------------------------------------
 # Paleta de cores — identidade Unimed (verde). Degrada para texto sem cor
@@ -421,7 +423,7 @@ KATA2_DEV_BACKEND_PID=""
 KATA2_DEV_LOG=""
 
 kata2_dev_log_path() {
-  printf '%s' "$ROOT_DIR/kata-2/.logs/backend.log"
+  printf '%s' "$ROOT_DIR/$KATA2_LOG_FILE"
 }
 
 kata2_dev_prepare_log() {
@@ -434,7 +436,7 @@ kata2_dev_print_header() {
   print_box_header "KATA 2 · EXECUCAO INTEGRADA (BACKEND + FRONTEND)"
   print_metadata_line "Backend" "http://localhost:5000"
   print_metadata_line "Frontend" "http://localhost:5173"
-  print_metadata_line "Logs" "kata-2/.logs/backend.log"
+  print_metadata_line "Logs" "$KATA2_LOG_FILE"
   print_metadata_line "Encerrar" "Ctrl+C (o backend sera finalizado automaticamente)"
   print_thin_rule
 }
@@ -562,10 +564,11 @@ validate_all() {
 
 showcase_serve() {
   require_command python3 || return $?
-  print_box_header "SHOWCASE · APRESENTACAO WEB DO PROJETO"
+  print_box_header "SHOWCASE · PORTAL VISUAL DO REPOSITORIO"
   print_metadata_line "URL" "http://localhost:${SHOWCASE_PORT}"
   print_metadata_line "Origem" "showcase/"
-  print_metadata_line "Modo" "UI estatica + API local para simulacoes acima de 2k"
+  print_metadata_line "Modo" "visao geral, docs, comandos e playground visual"
+  print_metadata_line "Escopo" "camada de apresentacao; terminal continua oficial"
   print_metadata_line "Encerrar" "Ctrl+C"
   print_thin_rule
 
@@ -682,13 +685,14 @@ EOF
   print_help_command "bash scripts/kata.sh kata4 tests" "Testes unitarios" "star"
   print_help_command "bash scripts/kata.sh kata4 all" "Pipeline + testes"
 
+  print_help_section_title "SHOWCASE — Portal visual do repositorio"
+  print_help_note "Serve como porta de entrada visual do projeto, sem substituir bash scripts/kata.sh nem os comandos manuais."
+  print_help_command "bash scripts/kata.sh showcase serve" "Sobe o showcase com docs, visao geral e playground"
+  print_help_command "bash scripts/kata.sh showcase tests" "Testa a API local e a logica do showcase"
+
   print_help_section_title "REPOSITORIO"
   print_help_command "bash scripts/kata.sh all validate" "Valida Kata 1 + Kata 2 + Kata 4"
   print_help_command "bash scripts/kata.sh help" "Esta tela de ajuda"
-
-  print_help_section_title "APRESENTACAO EXTRA"
-  print_help_command "bash scripts/kata.sh showcase serve" "Sobe a vitrine web opcional do projeto"
-  print_help_command "bash scripts/kata.sh showcase tests" "Testa a API local e a logica do showcase"
 
   printf '\nSem argumentos, o script abre o menu interativo.\n'
 }
@@ -838,11 +842,13 @@ render_main_menu() {
   print_menu_item "8" "Kata 2 · suite offline" "build + testes + lint + build frontend"
   print_menu_item "9" "Kata 4 · testes"
 
+  print_section "SHOWCASE E APRESENTACAO"
+  print_menu_item "s" "Showcase do repositorio" "porta de entrada visual, docs e playground"
+
   print_section "AVANCADO"
   print_menu_item "a" "Menu detalhado da Kata 1"
   print_menu_item "b" "Menu detalhado da Kata 2"
   print_menu_item "c" "Menu detalhado da Kata 4"
-  print_menu_item "s" "Showcase web do projeto" "frontend extra para apresentacao geral"
   print_menu_item "h" "Lista completa de comandos CLI"
   print_menu_item "0" "Sair"
   echo
