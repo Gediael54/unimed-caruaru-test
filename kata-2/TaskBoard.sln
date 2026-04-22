@@ -2,15 +2,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend", "backend", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TaskBoard.Api", "src\\TaskBoard.Api\\TaskBoard.Api.csproj", "{75D8194E-8C03-4DAE-90EF-1E2A009CCB30}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TaskBoard.Api", "backend\\TaskBoard.Api.csproj", "{75D8194E-8C03-4DAE-90EF-1E2A009CCB30}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TaskBoard.Web", "TaskBoard.Web", "{C9208E17-12D5-4DD4-A517-5D4CC6A1C4A1}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "frontend", "frontend", "{C9208E17-12D5-4DD4-A517-5D4CC6A1C4A1}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend.tests", "backend.tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TaskBoard.Api.Tests", "tests\\TaskBoard.Api.Tests\\TaskBoard.Api.Tests.csproj", "{165C295E-1C4A-44B0-9BCF-AC733086351B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TaskBoard.Api.Tests", "backend.tests\\TaskBoard.Api.Tests.csproj", "{165C295E-1C4A-44B0-9BCF-AC733086351B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
