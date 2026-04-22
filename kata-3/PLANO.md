@@ -3,7 +3,7 @@
 ## TL;DR
 
 - **Top 3 prioridades**: (1) idempotência em `POST /orders` para eliminar duplicidade, (2) diagnóstico e correção da consulta lenta (p95 8–12 s → ≤ 500 ms), (3) testes de caracterização para virar rede de segurança dos próximos passos.
-- **Decisão de arquitetura**: refatoração incremental do módulo de 4.000 linhas, não reescrita — time saturado, sem testes, e a reescrita só prova funcionar ao substituir 100%.
+- **Decisão de arquitetura**: neste cenário, refatoração incremental do módulo de 4.000 linhas — ela equilibra melhor risco operacional, falta de testes e capacidade do time; a reescrita passa a fazer mais sentido quando houver isolamento, contratos conhecidos e migração controlada.
 - **Ganhos mensuráveis**: zero duplicados em relatório diário por 2 semanas, p95 ≤ 500 ms sob pico, cobertura ≥ 70% nos fluxos críticos e 100% dos deploys via pipeline com revisão.
 
 Plano técnico organizado nas quatro seções exigidas pelo teste: diagnóstico problema a problema, plano de ação para as três maiores prioridades, decisão de arquitetura argumentada e requisitos não funcionais ignorados com métricas de monitoramento.
@@ -63,7 +63,7 @@ Escolho as três ações que mais reduzem risco imediato e habilitam as demais: 
 - **O que será feito (técnico)**:
   1. Adicionar chave de idempotência (`Idempotency-Key` no header) no endpoint `POST /orders`; persistir em tabela `order_idempotency_keys` com TTL.
   2. Criar restrição única de negócio em `(client_id, idempotency_key)`.
-  3. Envolver criação de pedido em transação; tratar violação de unique devolvendo o pedido já existente (`200` com o recurso), não `500`.
+  3. Envolver criação de pedido em transação; persistir `response_status` e `response_body` e, no retry com mesmo payload, reapresentar a mesma resposta original em vez de criar novo pedido ou cair em `500`.
   4. Ajustar clientes/mobile/backend de retentativa para reutilizar a mesma chave em retry.
   5. Adicionar logs de duplicidade (chave, cliente, origem) para monitorar pós-implantação.
 - **Esforço estimado**: 2–3 dias (1 dia de implementação + 1 dia de testes de integração + 0.5 dia de coordenação com clientes/frontends + 0.5 dia de monitoramento).
@@ -109,7 +109,7 @@ o pedido dentro da mesma transação que insere a linha aqui. Uma rotina varre
   5. Validar com teste de carga controlado (k6/JMeter) simulando o pico observado.
 - **Esforço estimado**: 3–5 dias (1 dia de análise + 1–2 dias de correção + 1 dia de validação de carga + 0.5 dia de ajuste de monitoramento).
 - **Critério de sucesso**:
-  - p95 do endpoint cai de 8–12 s para ≤ 1 s em produção, medido durante o próximo pico.
+  - p95 do endpoint cai de 8–12 s para ≤ 500 ms em produção, medido durante o próximo pico.
   - Teste de carga repetível mantém p95 estável sob carga equivalente ao pico observado.
   - Alerta de SLO silencia por pelo menos duas semanas consecutivas.
 
@@ -128,37 +128,37 @@ o pedido dentro da mesma transação que insere a linha aqui. Uma rotina varre
 
 ## Seção 3 — Decisão de Arquitetura
 
-**Escolho a Opção A — Refatoração incremental.**
+**As duas opções são válidas. Neste contexto, eu escolheria a Opção A — Refatoração incremental.**
 
 ### Matriz de decisão — refatoração × reescrita
 
 | Critério | Refatoração incremental | Reescrita do zero |
 | --- | --- | --- |
-| Risco de regressão no curto prazo | Baixo — cada passo mantém estado funcional anterior | Alto — só prova funcionar quando substitui 100% |
-| Rede de segurança necessária | Combina com testes de caracterização (Ação 3) | Exige paridade comportamental completa antes do corte |
-| Esforço do time | Absorve em ciclos curtos ao lado de manutenção | Projeto paralelo; compete com manutenção de um time já saturado |
-| Entrega contínua de valor | Sim — cada módulo extraído já agrega valor | Só no "big bang" final |
-| Redescoberta de regras escondidas | Cedo e barato, um módulo por vez | Tarde, quando o novo design já foi fechado |
-| Reversibilidade | Alta — reverter um passo é barato | Baixa — reverter a reescrita inteira é caro |
-| Janela até primeiro ganho visível | Dias a semanas | Meses |
-| Risco de "second system" divergente | Baixo | Alto — código novo e antigo coexistem |
+| Comportamento atual não está capturado por testes | Permite primeiro caracterizar o que o sistema faz e só depois mexer na estrutura | Exige muito mais confiança na leitura do legado para não reconstruir regras erradas |
+| Módulo ainda sofre incidentes e hotfixes | Permite corrigir produção e refatorar no mesmo fluxo | Fica vulnerável a desvio de escopo se o legado continuar mudando enquanto a nova versão é escrita |
+| Momento em que o risco aparece | O risco fica distribuído em mudanças pequenas | O maior risco se concentra no corte para o módulo novo |
+| Quando faz mais sentido | Quando o problema principal é risco operacional com baixa previsibilidade | Quando o módulo está isolado, o comportamento é conhecido e existe capacidade real para migração planejada |
 
-**Argumentação**:
+### Por que eu escolheria A neste cenário
 
-1. **Contexto de produção sem testes**: reescrever uma camada de 4.000 linhas sem rede de segurança é substituir uma caixa-preta por outra, mas com o sistema antigo ainda rodando e acumulando mudanças. O risco de regressão é extremamente alto, porque não existe verdade comportamental capturada.
-2. **Time ocupado**: uma reescrita é historicamente um projeto paralelo que compete com manutenção. Num time já saturado, isso provoca abandono (nem a reescrita termina nem a manutenção avança) ou cria um *second system* com comportamento divergente, caro de reconciliar.
-3. **Valor incremental**: extrair um módulo por vez mantém o sistema entregando valor ao negócio durante toda a transição. Cada módulo extraído recebe testes de caracterização, interfaces estáveis, e pode ser evoluído com segurança no próximo ciclo.
-4. **Redução de risco por passo**: a refatoração incremental sempre mantém um estado funcional anterior a cada mudança. A reescrita só prova funcionar quando substitui 100% — que é exatamente o ponto em que regressões silenciosas aparecem em produção.
-5. **Aprendizado iterativo**: extrair módulos pequenos revela regras de negócio escondidas cedo, quando ainda é barato mudar a fronteira. A reescrita redescobre essas regras tarde, quando o design já foi fechado.
-6. **Compatibilidade com as Ações 1–3**: a refatoração incremental apoia-se nos testes de caracterização da Ação 3 como rede de segurança. A reescrita não tira proveito deles da mesma forma.
+Escolho A **não porque B seja “ruim”**, mas porque o contexto descrito favorece fortemente uma abordagem incremental:
 
-**Condições que poderiam inverter a decisão** (reconhecendo que não é dogma):
+1. **Sistema em produção sem testes**: antes de trocar o motor, eu preciso capturar o comportamento atual. A refatoração incremental permite criar essa proteção enquanto extraio partes do módulo.
+2. **O legado continua mudando enquanto está problemático**: aqui não é apenas “time ocupado”. O módulo ainda sofre com incidentes, hotfixes e correções urgentes. A refatoração incremental permite corrigir o sistema real e melhorar sua estrutura no mesmo fluxo. Já a reescrita do zero fica mais frágil quando o comportamento do legado continua se deslocando semana após semana.
+3. **Problemas operacionais já ativos**: há lentidão, duplicidade e ausência de governança. O time precisa atacar risco agora, não apostar tudo num corte futuro.
+4. **Baixa clareza sobre regras escondidas**: um arquivo de 4.000 linhas em sistema legado costuma guardar exceções de negócio que nem sempre estão documentadas. Descobrir isso aos poucos tende a ser mais seguro.
 
-- Se o módulo fosse totalmente isolado, com entradas e saídas já bem definidas e testáveis.
-- Se o time tivesse capacidade ociosa real (não é o caso).
-- Se a stack do módulo estivesse sendo descontinuada, exigindo reescrita por motivos externos.
+### Em que cenário eu escolheria B
 
-Nenhuma dessas condições se aplica ao contexto descrito. Portanto, refatoração incremental é a escolha mais defensável.
+Eu escolheria a **Opção B — Reescrita do zero** se o contexto mudasse para algo como:
+
+- o módulo estivesse **bem isolado**, com entradas e saídas claras e poucas integrações laterais;
+- o comportamento atual já estivesse **mapeado por testes, logs e contratos**, reduzindo o risco de reconstrução incorreta;
+- houvesse **time dedicado** ou pelo menos capacidade real para sustentar o esforço sem abandonar a operação;
+- existisse uma necessidade estratégica mais forte, como **troca obrigatória de stack**, fim de suporte da tecnologia atual ou limitações estruturais que tornassem a refatoração antieconômica;
+- a migração pudesse ser feita com **cutover controlado**, feature flag, shadow traffic ou operação paralela observável.
+
+Em outras palavras: **A é a melhor escolha para o cenário descrito; B passa a ser melhor quando o contexto oferece isolamento, entendimento, capacidade e justificativa estratégica suficientes para assumir o risco de um redesenho completo**.
 
 ## Seção 4 — Requisitos Não Funcionais Ignorados
 
