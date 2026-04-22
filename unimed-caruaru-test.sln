@@ -6,7 +6,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "kata-2", "kata-2", "{C6F7F0
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend.tests", "backend.tests", "{8C1EE295-0E97-2018-5AA8-9D7D9FA7F68D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TaskBoard.Api.UnitTests", "kata-2\backend.tests\TaskBoard.Api.UnitTests.csproj", "{4F5E2B0A-F68E-4621-1EA2-15BED59E19E4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TaskBoard.Api.Tests", "kata-2\backend.tests\TaskBoard.Api.Tests.csproj", "{4F5E2B0A-F68E-4621-1EA2-15BED59E19E4}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend", "backend", "{E98BB91D-DD80-A5FE-AE03-AC3E7A063506}"
 EndProject
