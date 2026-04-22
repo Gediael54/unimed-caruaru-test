@@ -1,5 +1,5 @@
-id_cliente,nome_cliente,cidade,estado
-C001,Ana Silva," Caruaru ",PE
-C002,Bruno Lima,recife,PE
-C003,Clara Souza,Sao Paulo,SP
-C004,Daniel Costa,Maceió,AL
+id_cliente,nome,cidade,estado,data_cadastro
+C001,Ana Silva," Caruaru ",PE,2024-01-10
+C002,Bruno Lima,recife,PE,2024-02-15
+C003,Clara Souza,Sao Paulo,SP,2024-03-12
+C004,Daniel Costa,Maceió,AL,2024-04-20
