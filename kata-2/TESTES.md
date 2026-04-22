@@ -1,110 +1,81 @@
-# Kata 2 - Mapa de Testes
+# Kata 2 - Estrategia de Testes
 
-Resumo do que cada escopo de teste cobre. A Kata 2 separa **regra de dominio**,
-**contrato HTTP** e **UI** em suites independentes, todas rodaveis a partir da
-raiz do repositorio.
+Este arquivo descreve a cobertura esperada para a Kata 2 no recorte de
+**robust MVP**.
 
-## Como rodar
+## 1. Objetivo dos testes
 
-```bash
-bash scripts/kata.sh kata2 all
-```
+Os testes devem provar tres coisas:
 
-Equivalente manual:
+- o dominio do board e consistente;
+- o contrato HTTP e previsivel;
+- a UI permite operar o fluxo principal do workspace unico.
 
-```bash
-dotnet test kata-2/tests/TaskBoard.Api.Tests/TaskBoard.Api.Tests.csproj --filter Scope=Backend
-dotnet test kata-2/tests/TaskBoard.Api.Tests/TaskBoard.Api.Tests.csproj --filter Scope=Api
-npm --prefix kata-2/src/TaskBoard.Web run lint
-npm --prefix kata-2/src/TaskBoard.Web run test
-npm --prefix kata-2/src/TaskBoard.Web run build
-```
+Como nao existe autenticacao real neste recorte, nao faz sentido gastar energia
+em testes de login fake. A prioridade e validar o que o produto realmente
+promete.
 
-## Backend - `Scope=Backend` (TaskServiceTests)
+## 2. Backend - regras de dominio
 
-Foco em regras puras, sem subir servidor. Usa `InMemoryTaskRepository` direto.
+Os testes unitarios do service/repositorio devem cobrir pelo menos:
 
-- criacao aplica `trim` no titulo e status inicial `pending`;
-- criacao rejeita titulo em branco;
-- criacao rejeita titulo acima de 120 caracteres;
-- listagem com `status` invalido retorna erro de validacao;
-- `PATCH` sem nenhum campo atualizavel e rejeitado;
-- `PATCH` que nao altera o payload nao atualiza `UpdatedAt`;
-- `PATCH` valida titulo e status;
-- `DELETE` remove tarefa existente;
-- repositorio preserva escritas concorrentes.
+- criacao com `title`, `description` e `priority` validos;
+- `trim` e validacao de `title`;
+- aceitacao de `description` vazia e rejeicao de payload fora do limite
+  definido;
+- validacao de `priority` em `low`, `medium`, `high`;
+- validacao de `status` em `pending`, `in_progress`, `completed`, `cancelled`;
+- transicoes de status permitidas pelo MVP;
+- atualizacao parcial de `title`, `description`, `priority` e `status`;
+- `DELETE` convertendo o card para arquivado em vez de apagamento definitivo;
+- exclusao de cards arquivados da listagem padrao;
+- resposta correta para IDs inexistentes;
+- consistencia sob concorrencia local no repositório do workspace.
 
-## Contrato HTTP - `Scope=Api` (TasksApiTests)
+## 3. Contrato HTTP
 
-Sobe `WebApplicationFactory` e valida o contrato exposto.
+Os testes de API devem garantir:
 
-- `POST /tasks` retorna `201 Created` com corpo e `Location` corretos;
-- `GET /tasks` retorna `200 OK` com itens criados;
-- `GET /tasks?status=invalid` responde `ProblemDetails`;
-- `POST /tasks` com titulo acima do limite retorna `400`;
-- `PATCH /tasks/{id}` inexistente retorna `404`;
-- `PATCH /tasks/{id}` com payload vazio e recusado;
-- `PATCH /tasks/{id}` com status invalido retorna `400`;
-- `DELETE /tasks/{id}` existente retorna `204`;
-- `DELETE /tasks/{id}` inexistente retorna `404`;
-- `GET /health` retorna status saudavel;
-- documento OpenAPI e exposto;
-- cabecalhos de seguranca aplicados em respostas de API;
-- configuracao da API respeita defaults esperados (tamanho de corpo, CORS, etc.).
+- `POST /tasks` retorna `201 Created` com payload completo do card;
+- `GET /tasks` retorna somente cards ativos;
+- `GET /tasks?status=...` filtra apenas valores validos;
+- `PATCH /tasks/{id}` atualiza campos permitidos;
+- `PATCH /tasks/{id}` rejeita `priority` ou `status` invalidos;
+- `DELETE /tasks/{id}` retorna `204 No Content` e arquiva o card;
+- operacoes com ID inexistente retornam `404 Not Found`;
+- erros de validacao retornam `400 Bad Request`;
+- `GET /health` e `GET /openapi/v1.json` continuam acessiveis.
 
-### Matriz rapida de status code
+## 4. Frontend
 
-| Status code | Evidencia |
-| --- | --- |
-| `200 OK` | `GET /tasks`, `GET /health`, `PATCH /tasks/{id}` com payload valido |
-| `201 Created` | `POST /tasks` com titulo valido |
-| `204 No Content` | `DELETE /tasks/{id}` em tarefa existente |
-| `400 Bad Request` | filtro invalido, titulo invalido, `PATCH` vazio, status invalido |
-| `404 Not Found` | `PATCH` e `DELETE` para ID inexistente |
+Os testes de UI devem cobrir o fluxo principal do board:
 
-## Frontend - Vitest (`src/TaskBoard.Web/src/*.test.*`)
+- renderizacao inicial do workspace;
+- criacao de card com descricao e prioridade;
+- movimentacao entre `pending`, `in_progress`, `completed` e `cancelled`;
+- filtro por status;
+- arquivamento via acao que dispara `DELETE`;
+- remocao imediata do card da visao ativa apos arquivamento;
+- exibicao de estados de loading e erro.
 
-Testes rodam em JSDOM com setup em `src/test/setup.ts`.
+## 5. O que nao testar nesta fase
 
-- `App.test.tsx`: carga inicial, filtro por status, troca de visualizacao
-  (lista/kanban/timeline/em foco) e acoes principais (criar, concluir, excluir);
-- `task-board.test.ts`: regra do hook/store de tarefas isolada da UI.
+Fica explicitamente fora do escopo atual:
 
-Alem dos testes: `npm run lint` (ESLint) e `npm run build` (tsc + vite).
+- login ou logout cenografico;
+- permissao por papel;
+- ownership por usuario;
+- colaboracao em tempo real;
+- reconciliacao de conflito entre sessoes autenticadas.
 
-## Piramide de testes adotada
+Se esses cenarios entrarem antes da arquitetura correspondente, os testes vao
+passar a validar ficcao de produto, nao comportamento real.
 
-- **base**: regras puras do `TaskService` e comportamento do repositório em memoria;
-- **meio**: contrato HTTP com `WebApplicationFactory`;
-- **topo leve**: UI em Vitest/JSDOM para garantir que o usuario consegue operar a tela.
+## 6. Piramide recomendada
 
-Nao houve browser E2E real no escopo do MVP, mas a combinacao atual cobre:
+- base: testes unitarios de dominio;
+- meio: testes de contrato HTTP;
+- topo leve: testes de UI do fluxo principal.
 
-- regra;
-- contrato;
-- interacao principal da interface.
-
-## Cobertura
-
-Medi a cobertura do backend com o collector do `coverlet`:
-
-```bash
-dotnet test kata-2/tests/TaskBoard.Api.Tests/TaskBoard.Api.Tests.csproj --collect:"XPlat Code Coverage" --results-directory /tmp/kata2-coverage
-```
-
-Leitura usada para avaliacao:
-
-- **backend**: `100%` de cobertura de linha no codigo autoral em `src/TaskBoard.Api`;
-- **frontend**: `100%` de statements, branches, functions e lines em `src/TaskBoard.Web/src`.
-
-Observacao importante:
-
-- o XML bruto do collector do backend fica artificialmente menor porque mistura harness de teste e arquivos gerados em `obj/`;
-- por isso registrei o recorte util: apenas o codigo escrito para a kata;
-- no frontend, a medicao foi feita com Vitest + provider `v8`.
-
-## Fora do escopo
-
-- nao ha teste end-to-end com navegador real;
-- nao ha teste de carga ou concorrencia contra servidor real;
-- nao ha teste de persistencia duravel (a Kata 2 usa repositorio em memoria).
+Esse equilibrio e suficiente para o robust MVP porque o maior risco esta em
+regra de board e contrato, nao em automacao E2E pesada.
