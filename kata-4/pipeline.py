@@ -19,6 +19,7 @@ DATA_DIR = BASE_DIR / "data"
 OUTPUT_DIR = BASE_DIR / "output"
 
 REPORT_WIDTH = 66
+MAX_REJECTED_IN_JSON = 50
 
 
 class _Theme:
@@ -75,8 +76,7 @@ def _color_is_supported() -> bool:
 
 
 def _pick_theme() -> _Theme:
-    available = {True: _AnsiTheme(), False: _PlainTheme()}
-    return available[_color_is_supported()]
+    return _AnsiTheme() if _color_is_supported() else _PlainTheme()
 
 
 theme = _pick_theme()
@@ -94,6 +94,10 @@ CONSOLIDATED_COLUMNS = [
     "atraso_dias",
     "status_entrega",
 ]
+
+REJECTED_COLUMNS = ["file", "row", "reason"]
+
+REQUIRED_INPUT_FILES = ("pedidos.csv", "clientes.csv", "entregas.csv")
 
 
 @dataclass(frozen=True)
@@ -119,6 +123,40 @@ class Delivery:
     data_prevista_entrega: date | None
     data_realizada_entrega: date | None
     status_entrega: str
+
+
+@dataclass(frozen=True)
+class ConsolidatedOrder:
+    id_pedido: str
+    nome_cliente: str
+    cidade_normalizada: str
+    estado: str
+    valor_total: Decimal
+    status_pedido: str
+    data_pedido: date
+    data_prevista_entrega: date | None
+    data_realizada_entrega: date | None
+    atraso_dias: int | None
+    status_entrega: str
+
+    def as_csv_row(self) -> dict[str, str]:
+        return {
+            "id_pedido": self.id_pedido,
+            "nome_cliente": self.nome_cliente,
+            "cidade_normalizada": self.cidade_normalizada,
+            "estado": self.estado,
+            "valor_total": format_money(self.valor_total),
+            "status_pedido": self.status_pedido,
+            "data_pedido": self.data_pedido.isoformat(),
+            "data_prevista_entrega": (
+                self.data_prevista_entrega.isoformat() if self.data_prevista_entrega else ""
+            ),
+            "data_realizada_entrega": (
+                self.data_realizada_entrega.isoformat() if self.data_realizada_entrega else ""
+            ),
+            "atraso_dias": "" if self.atraso_dias is None else str(self.atraso_dias),
+            "status_entrega": self.status_entrega,
+        }
 
 
 def normalize_date(value: str | None) -> date | None:
@@ -184,6 +222,22 @@ def require(row: dict[str, str], field: str) -> str:
     return value.strip()
 
 
+def require_any(row: dict[str, str], *fields: str) -> str:
+    for field in fields:
+        value = row.get(field)
+        if value is not None and value.strip():
+            return value.strip()
+    raise ValueError(f"{fields[0]} is required")
+
+
+def optional_any(row: dict[str, str], *fields: str) -> str:
+    for field in fields:
+        value = row.get(field)
+        if value is not None and value.strip():
+            return value.strip()
+    return ""
+
+
 def load_orders(path: Path) -> tuple[list[Order], list[dict[str, str]]]:
     orders: list[Order] = []
     rejected: list[dict[str, str]] = []
@@ -203,7 +257,7 @@ def load_orders(path: Path) -> tuple[list[Order], list[dict[str, str]]]:
                     id_pedido=order_id,
                     id_cliente=require(row, "id_cliente"),
                     valor_total=parse_money(require(row, "valor_total")),
-                    status_pedido=require(row, "status_pedido").lower(),
+                    status_pedido=require_any(row, "status", "status_pedido").lower(),
                     data_pedido=parsed_date,
                 )
             )
@@ -228,7 +282,7 @@ def load_customers(path: Path) -> tuple[dict[str, Customer], list[dict[str, str]
 
             customers[id_cliente] = Customer(
                 id_cliente=id_cliente,
-                nome_cliente=require(row, "nome_cliente"),
+                nome_cliente=require_any(row, "nome", "nome_cliente"),
                 cidade_normalizada=normalize_city(require(row, "cidade")),
                 estado=require(row, "estado").upper(),
             )
@@ -252,8 +306,12 @@ def load_deliveries(path: Path) -> tuple[dict[str, Delivery], list[dict[str, str
 
             deliveries[id_pedido] = Delivery(
                 id_pedido=id_pedido,
-                data_prevista_entrega=normalize_date(row.get("data_prevista_entrega")),
-                data_realizada_entrega=normalize_date(row.get("data_realizada_entrega")),
+                data_prevista_entrega=normalize_date(
+                    optional_any(row, "data_prevista", "data_prevista_entrega")
+                ),
+                data_realizada_entrega=normalize_date(
+                    optional_any(row, "data_realizada", "data_realizada_entrega")
+                ),
                 status_entrega=(row.get("status_entrega") or "sem_entrega").strip().lower(),
             )
         except ValueError as exc:
@@ -279,8 +337,8 @@ def build_consolidated_rows(
     orders: Iterable[Order],
     customers: dict[str, Customer],
     deliveries: dict[str, Delivery],
-) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-    rows: list[dict[str, str]] = []
+) -> tuple[list[ConsolidatedOrder], list[dict[str, str]]]:
+    rows: list[ConsolidatedOrder] = []
     rejected: list[dict[str, str]] = []
 
     for order in sorted(orders, key=lambda item: item.id_pedido):
@@ -296,65 +354,62 @@ def build_consolidated_rows(
             continue
 
         delivery = deliveries.get(order.id_pedido)
-        delay = calculate_delay(delivery)
         rows.append(
-            {
-                "id_pedido": order.id_pedido,
-                "nome_cliente": customer.nome_cliente,
-                "cidade_normalizada": customer.cidade_normalizada,
-                "estado": customer.estado,
-                "valor_total": format_money(order.valor_total),
-                "status_pedido": order.status_pedido,
-                "data_pedido": order.data_pedido.isoformat(),
-                "data_prevista_entrega": (
-                    delivery.data_prevista_entrega.isoformat()
-                    if delivery and delivery.data_prevista_entrega
-                    else ""
+            ConsolidatedOrder(
+                id_pedido=order.id_pedido,
+                nome_cliente=customer.nome_cliente,
+                cidade_normalizada=customer.cidade_normalizada,
+                estado=customer.estado,
+                valor_total=order.valor_total,
+                status_pedido=order.status_pedido,
+                data_pedido=order.data_pedido,
+                data_prevista_entrega=(
+                    delivery.data_prevista_entrega if delivery else None
                 ),
-                "data_realizada_entrega": (
-                    delivery.data_realizada_entrega.isoformat()
-                    if delivery and delivery.data_realizada_entrega
-                    else ""
+                data_realizada_entrega=(
+                    delivery.data_realizada_entrega if delivery else None
                 ),
-                "atraso_dias": "" if delay is None else str(delay),
-                "status_entrega": delivery.status_entrega if delivery else "sem_entrega",
-            }
+                atraso_dias=calculate_delay(delivery),
+                status_entrega=delivery.status_entrega if delivery else "sem_entrega",
+            )
         )
 
     return rows, rejected
 
 
 def calculate_indicators(
-    rows: list[dict[str, str]],
-    orders: list[Order],
+    rows: list[ConsolidatedOrder],
+    order_ids: set[str],
     deliveries: dict[str, Delivery],
     rejected_rows: list[dict[str, str]],
 ) -> dict[str, object]:
-    status_counter = Counter(row["status_pedido"] for row in rows)
-    city_counter = Counter(row["cidade_normalizada"] for row in rows)
+    status_counter = Counter(row.status_pedido for row in rows)
+    city_counter = Counter(row.cidade_normalizada for row in rows)
 
     state_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     state_counts: Counter[str] = Counter()
     for row in rows:
-        state = row["estado"]
-        state_totals[state] += Decimal(row["valor_total"])
-        state_counts[state] += 1
+        state_totals[row.estado] += row.valor_total
+        state_counts[row.estado] += 1
 
-    delivered_rows = [row for row in rows if row["data_realizada_entrega"]]
-    delayed_rows = [row for row in delivered_rows if int(row["atraso_dias"] or "0") > 0]
-    on_time_rows = [row for row in delivered_rows if int(row["atraso_dias"] or "0") <= 0]
-    delivered_count = len(delivered_rows)
+    delivered_rows = [row for row in rows if row.data_realizada_entrega is not None]
+    rated_rows = [row for row in delivered_rows if row.atraso_dias is not None]
+    delayed_rows = [row for row in rated_rows if row.atraso_dias > 0]
+    on_time_rows = [row for row in rated_rows if row.atraso_dias <= 0]
+    rated_count = len(rated_rows)
 
-    order_ids = {order.id_pedido for order in orders}
     orphan_deliveries = sorted(
         delivery_id for delivery_id in deliveries if delivery_id not in order_ids
     )
 
     average_delay = (
-        sum(int(row["atraso_dias"]) for row in delayed_rows) / len(delayed_rows)
+        sum(row.atraso_dias for row in delayed_rows) / len(delayed_rows)
         if delayed_rows
         else 0
     )
+
+    rejected_total = len(rejected_rows)
+    rejected_truncated = rejected_total > MAX_REJECTED_IN_JSON
 
     return {
         "total_orders_by_status": dict(sorted(status_counter.items())),
@@ -363,13 +418,14 @@ def calculate_indicators(
             for state in sorted(state_totals)
         },
         "delivery_percentages": {
-            "on_time": round((len(on_time_rows) / delivered_count) * 100, 2)
-            if delivered_count
+            "on_time": round((len(on_time_rows) / rated_count) * 100, 2)
+            if rated_count
             else 0,
-            "delayed": round((len(delayed_rows) / delivered_count) * 100, 2)
-            if delivered_count
+            "delayed": round((len(delayed_rows) / rated_count) * 100, 2)
+            if rated_count
             else 0,
         },
+        "delivered_without_expected_date": len(delivered_rows) - rated_count,
         "top_3_cities_by_order_volume": [
             {"city": city, "orders": count}
             for city, count in city_counter.most_common(3)
@@ -377,16 +433,29 @@ def calculate_indicators(
         "average_delay_days_for_delayed_orders": round(average_delay, 2),
         "orphan_delivery_count": len(orphan_deliveries),
         "orphan_delivery_ids": orphan_deliveries,
-        "rejected_row_count": len(rejected_rows),
-        "rejected_rows": rejected_rows,
+        "rejected_row_count": rejected_total,
+        "rejected_rows": rejected_rows[:MAX_REJECTED_IN_JSON],
+        "rejected_rows_truncated": rejected_truncated,
     }
 
 
-def write_consolidated(path: Path, rows: list[dict[str, str]]) -> None:
+def write_consolidated(path: Path, rows: list[ConsolidatedOrder]) -> None:
     with path.open("w", encoding="utf-8", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=CONSOLIDATED_COLUMNS)
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(row.as_csv_row() for row in rows)
+
+
+def write_rejected(path: Path, rejected: list[dict[str, str]]) -> None:
+    if not rejected:
+        if path.exists():
+            path.unlink()
+        return
+
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=REJECTED_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rejected)
 
 
 def write_indicators(path: Path, indicators: dict[str, object]) -> None:
@@ -396,17 +465,30 @@ def write_indicators(path: Path, indicators: dict[str, object]) -> None:
     )
 
 
+def _check_inputs(data_dir: Path) -> None:
+    for required_file in REQUIRED_INPUT_FILES:
+        path = data_dir / required_file
+        if not path.exists():
+            raise FileNotFoundError(f"arquivo de entrada nao encontrado: {path}")
+
+
 def run_pipeline(data_dir: Path = DATA_DIR, output_dir: Path = OUTPUT_DIR) -> dict[str, object]:
+    _check_inputs(data_dir)
+
     orders, rejected_orders = load_orders(data_dir / "pedidos.csv")
     customers, rejected_customers = load_customers(data_dir / "clientes.csv")
     deliveries, rejected_deliveries = load_deliveries(data_dir / "entregas.csv")
 
     rows, rejected_join_rows = build_consolidated_rows(orders, customers, deliveries)
-    rejected_rows = rejected_orders + rejected_customers + rejected_deliveries + rejected_join_rows
-    indicators = calculate_indicators(rows, orders, deliveries, rejected_rows)
+    rejected_rows = (
+        rejected_orders + rejected_customers + rejected_deliveries + rejected_join_rows
+    )
+    order_ids = {order.id_pedido for order in orders}
+    indicators = calculate_indicators(rows, order_ids, deliveries, rejected_rows)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     write_consolidated(output_dir / "consolidated.csv", rows)
+    write_rejected(output_dir / "rejected.csv", rejected_rows)
     write_indicators(output_dir / "indicators.json", indicators)
 
     return indicators
@@ -451,7 +533,7 @@ class _SummaryRenderer:
     def _print_metadata(self) -> None:
         _print_path_line("Entrada", self.data_dir)
         _print_path_line("Saida", self.output_dir)
-        _print_path_line("Gerados", "consolidated.csv, indicators.json")
+        _print_path_line("Gerados", "consolidated.csv, indicators.json, rejected.csv")
         _print_separator("-" * REPORT_WIDTH)
 
     def _print_status_totals(self) -> None:
@@ -471,7 +553,12 @@ class _SummaryRenderer:
         percentages = self.indicators["delivery_percentages"]
         print(f"    {theme.success('no prazo')}   {percentages['on_time']}%")
         print(f"    com atraso  {percentages['delayed']}%")
-        print(f"    atraso medio (dias) {self.indicators['average_delay_days_for_delayed_orders']}")
+        without_sla = self.indicators.get("delivered_without_expected_date", 0)
+        if without_sla:
+            print(f"    sem prazo   {without_sla}")
+        print(
+            f"    atraso medio (dias) {self.indicators['average_delay_days_for_delayed_orders']}"
+        )
         print()
 
     def _print_top_cities(self) -> None:
@@ -484,6 +571,11 @@ class _SummaryRenderer:
         _print_heading("Qualidade dos dados")
         print(f"    entregas orfas   {self.indicators['orphan_delivery_count']}")
         print(f"    linhas rejeitadas {self.indicators['rejected_row_count']}")
+        if self.indicators.get("rejected_rows_truncated"):
+            print(
+                f"    amostra no JSON  primeiras {MAX_REJECTED_IN_JSON} "
+                f"(lista completa em rejected.csv)"
+            )
 
     def _print_footer(self) -> None:
         consolidated_path = self.output_dir / "consolidated.csv"
@@ -538,7 +630,12 @@ def _build_argument_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_argument_parser().parse_args(argv)
-    indicators = run_pipeline(args.data_dir, args.output_dir)
+    try:
+        indicators = run_pipeline(args.data_dir, args.output_dir)
+    except FileNotFoundError as exc:
+        print(f"erro: {exc}", file=sys.stderr)
+        return 2
+
     if not args.quiet:
         print_summary(indicators, data_dir=args.data_dir, output_dir=args.output_dir)
     return 0
