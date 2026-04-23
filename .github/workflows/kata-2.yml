@@ -34,10 +34,10 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: "kata-2/src/TaskBoard.Web/package-lock.json"
+          cache-dependency-path: "kata-2/frontend/package-lock.json"
 
       - name: Install frontend dependencies
-        run: npm --prefix kata-2/src/TaskBoard.Web ci
+        run: npm --prefix kata-2/frontend ci
 
       - name: Run Kata 2 validation
         run: bash scripts/kata.sh kata2 all
