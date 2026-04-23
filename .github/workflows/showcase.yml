@@ -1,0 +1,44 @@
+name: Showcase
+
+on:
+  push:
+    paths:
+      - ".github/workflows/showcase.yml"
+      - "showcase/**"
+      - "kata-1/**"
+      - "scripts/**"
+      - "README.md"
+      - ".editorconfig"
+      - ".gitattributes"
+  pull_request:
+    paths:
+      - ".github/workflows/showcase.yml"
+      - "showcase/**"
+      - "kata-1/**"
+      - "scripts/**"
+      - "README.md"
+      - ".editorconfig"
+      - ".gitattributes"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-showcase:
+    name: Validate Showcase
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check bash runner syntax
+        run: bash -n scripts/kata.sh
+
+      - name: Run showcase tests
+        run: python3 -m unittest discover -s showcase -p "test_*.py"
