@@ -923,7 +923,7 @@ def requirements_checklist(*, verbose: bool = True) -> None:
     ]
 
     if not verbose:
-        bullet("OK", "Parte A implementada e validada com 61 testes automatizados.")
+        bullet("OK", "Parte A implementada e validada com testes automatizados.")
         print("         -> evidence: src/triage_queue/domain.py + tests/test_triage.py")
         bullet("OK", "Parte B documentada com decisões, escalabilidade, extensibilidade e exemplos.")
         print(f"         -> evidence: {ANALYSIS_PATH.name}")
