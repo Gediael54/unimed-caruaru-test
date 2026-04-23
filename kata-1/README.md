@@ -1,61 +1,108 @@
 # Kata 1 - Fila de Triagem
 
-## O que esta pasta entrega
+## Papel Deste README
 
-- `src/triage_queue/domain.py`: implementacao real da ordenacao da fila e estrutura adicional para operacao continua;
-- `src/triage_queue/verify_cli.py`: validacao executavel e benchmark;
-- `src/triage_queue/explore_cli.py`: explorer interativo;
-- `tests/test_triage.py`: testes unitarios e de integracao;
-- `schema.sql`: modelagem SQL e view com a mesma logica de priorizacao;
-- `verify.py`: wrapper de compatibilidade para manter os comandos documentados;
-- `explore.py`: wrapper de compatibilidade para manter os comandos documentados;
-- `triage.py`: wrapper de compatibilidade para import legado;
-- `pyproject.toml`: metadados do mini projeto Python;
-- `ANALISE.md`: decisoes de engenharia e trade-offs.
+Este README e o guia local da Kata 1. Ele cobre:
 
-## Trade-off da organizacao
+- o que existe nesta pasta;
+- como executar e validar a kata;
+- em que ordem vale a pena ler os arquivos;
+- quais limites e trade-offs ficam para `ANALISE.md`.
 
-A implementacao saiu de uma pasta totalmente plana para um formato mais proximo de projeto real:
+Se voce quer o mapa do repositorio inteiro, volte para `../README.md`.
 
-- `src/` concentra a regra de negocio;
-- `tests/` deixa a suite explicita;
-- wrappers na raiz preservam os comandos esperados pelo README, runner e showcase.
+## Ordem Recomendada De Leitura
 
-Escolhi esse meio-termo porque melhora a arquitetura sem quebrar o fluxo de avaliacao.
+1. este `README.md` para ver estrutura e comandos;
+2. `ANALISE.md` para entender decisoes de modelagem, SQL e benchmark;
+3. `verify.py --mode demo` ou `bash scripts/kata.sh kata1 demo`;
+4. `src/triage_queue/domain.py` para a regra principal;
+5. `tests/test_triage.py` para a cobertura automatizada;
+6. `schema.sql` para a leitura SQL equivalente.
 
-## Como validar
+## Estrutura Da Pasta
 
-Fluxo principal:
+- `src/triage_queue/domain.py`
+  - implementacao principal da ordenacao e da estrutura de apoio;
+- `src/triage_queue/verify_cli.py`
+  - validacao executavel, benchmark e checklist de rastreabilidade;
+- `src/triage_queue/explore_cli.py`
+  - explorer interativo de casos e volume;
+- `tests/test_triage.py`
+  - testes unitarios e de integracao;
+- `schema.sql`
+  - modelagem SQL e view com a mesma logica de priorizacao;
+- `verify.py`, `explore.py`, `triage.py`
+  - wrappers finos para manter os comandos documentados;
+- `pyproject.toml`
+  - metadados do mini projeto Python;
+- `ANALISE.md`
+  - trade-offs, escalabilidade e justificativas.
+
+## O Que Precisa Para Rodar
+
+- `Python 3.11+`
+
+Nao ha dependencias externas da kata para instalar via `pip`.
+
+## Comandos Principais
+
+### Manual
+
+Dentro de `kata-1/`:
 
 ```bash
 python3 verify.py
-```
-
-Outras validacoes:
-
-```bash
-python3 verify.py --mode full-verbose
 python3 verify.py --mode demo
+python3 verify.py --mode full-verbose
 python3 verify.py --mode benchmark
 python3 explore.py
-python3 explore.py --case rule-1
-python3 explore.py --size 5000
 python3 -m unittest discover -s . -p 'test_*.py'
 ```
 
-## Checklist rapido
+### Runner
 
-Atende:
+Na raiz do repositorio:
 
-- regras 1 a 5 do enunciado;
-- testes de borda das regras etarias;
-- justificativa de estrutura de dados;
-- analise de escalabilidade;
-- modelagem SQL com view equivalente;
-- camada extra de exploracao guiada para demonstracao.
+```bash
+bash scripts/kata.sh kata1 tests
+bash scripts/kata.sh kata1 demo
+bash scripts/kata.sh kata1 verify
+bash scripts/kata.sh kata1 verify-verbose
+bash scripts/kata.sh kata1 benchmark
+bash scripts/kata.sh kata1 explore
+```
 
-Limites conhecidos:
+### Windows Nativo
+
+Na raiz do repositorio:
+
+```text
+scripts\kata.cmd kata1 tests
+scripts\kata.cmd kata1 demo
+scripts\kata.cmd kata1 verify
+scripts\kata.cmd kata1 verify-verbose
+scripts\kata.cmd kata1 benchmark
+scripts\kata.cmd kata1 explore
+```
+
+## O Que Vale Conferir
+
+Se a revisao for rapida:
+
+- rode `demo` e `tests`;
+- leia `ANALISE.md`;
+- abra `domain.py`.
+
+Se a revisao for mais profunda:
+
+- compare `domain.py` com `schema.sql`;
+- veja os casos de borda em `tests/test_triage.py`;
+- rode `verify.py` para a validacao guiada;
+- rode `explore.py` para inspecao manual de casos.
+
+## Limites Conhecidos
 
 - a solucao principal e orientada a lote;
-- persistencia nao faz parte da implementacao Python principal;
-- o benchmark e ilustrativo, nao cientifico.
+- o benchmark e ilustrativo, nao cientifico;
+- a persistencia SQL existe como modelagem e validacao de paridade, nao como app transacional completa.
