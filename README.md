@@ -44,7 +44,7 @@ Para rodar o repositorio completo localmente:
 - `.NET SDK 10`
   - usado no backend e nos testes da `kata-2`;
 - `Node.js`
-  - recomendo `Node.js 22 LTS` ou `Node.js 20.19+`;
+  - recomendo `Node.js 24.14.0` para ficar igual ao CI, ou `Node.js 22.13+`;
   - o frontend da `kata-2` depende de uma versao compativel com `Vite 7`;
 - `npm`
   - normalmente ja vem junto com o Node.js;
@@ -70,7 +70,7 @@ where python
 where py
 ```
 
-Linux, macOS, WSL ou Git Bash:
+Linux, macOS ou WSL:
 
 ```bash
 python3 --version
@@ -79,19 +79,31 @@ node --version
 npm --version
 ```
 
+Git Bash no Windows:
+
+```bash
+python --version
+python3 --version
+dotnet --version
+node --version
+npm --version
+```
+
+No Git Bash, use o comando Python que existir no seu `PATH`; o runner tenta `python3` e depois `python`.
+
 ## Setup Minimo Antes De Rodar
 
 Depois de instalar as ferramentas:
 
 ```bash
 dotnet restore kata-2/backend.tests/TaskBoard.Api.Tests.csproj
-npm --prefix kata-2/frontend install
+npm --prefix kata-2/frontend ci
 ```
 
 Esses dois passos cobrem os downloads locais do repositorio:
 
 - `dotnet restore` baixa os pacotes do backend/testes da `kata-2`;
-- `npm install` baixa as dependencias do frontend da `kata-2`.
+- `npm ci` baixa as dependencias do frontend da `kata-2` exatamente como no `package-lock.json`.
 
 As Katas 1 e 4 usam `stdlib` + estrutura Python local; nao exigem `pip install`.
 
@@ -105,7 +117,7 @@ As Katas 1 e 4 usam `stdlib` + estrutura Python local; nao exigem `pip install`.
   - confirme se a pasta do Python entrou no `PATH`.
 - Se quiser a experiencia completa do runner com menu e cores, use `Git Bash` e rode `bash scripts/kata.sh`.
 - Se quiser ficar em `cmd.exe` ou PowerShell, use `scripts\kata.cmd`.
-- Os runners agora falham cedo quando falta ferramenta, `npm install` da `kata-2/frontend` ou `dotnet restore` da `kata-2`, e informam o comando exato para corrigir.
+- Os runners agora falham cedo quando falta ferramenta, `npm ci` da `kata-2/frontend` ou `dotnet restore` da `kata-2`, e informam o comando exato para corrigir.
 
 Vantagens praticas de usar `bash`/Git Bash no Windows:
 
