@@ -4,11 +4,13 @@
 
 Datas são normalizadas para o formato ISO `YYYY-MM-DD` na saída. O parser aceita `DD/MM/YYYY`, `YYYY-MM-DD` e valores ISO com aparência de timestamp.
 
-Valores monetários são lidos como `Decimal` para evitar erros de arredondamento do ponto flutuante. Decimais com vírgula são aceitos e a saída é escrita com duas casas decimais.
+Valores monetários são lidos como `Decimal` para evitar erros de arredondamento do ponto flutuante. O parser aceita decimal BR (`1.250,75`) e US (`1,250.75`) detectando o separador decimal pelo último separador usado; a saída é escrita com duas casas decimais.
 
 Campos obrigatórios são validados antes do registro entrar no conjunto consolidado. Linhas inválidas são descartadas e reportadas em `indicators.json` dentro de `rejected_rows`.
 
 Entregas sem pedido correspondente são tratadas como registros órfãos. Elas não geram pedidos consolidados, mas a contagem e os IDs são incluídos nos indicadores.
+
+Os percentuais de entrega consideram apenas pedidos não cancelados com `status_entrega = entregue` e `data_realizada` preenchida. Isso evita que pedido cancelado ou entrega ainda pendente altere o KPI operacional de prazo.
 
 Duplicidades de `id_pedido` e `id_cliente` não são sobrescritas silenciosamente. A política adotada é: **a primeira linha válida vence; ocorrências duplicadas posteriores são rejeitadas e reportadas**. Isso preserva determinismo, evita perda silenciosa de informação e deixa a anomalia visível para auditoria.
 
@@ -39,7 +41,7 @@ Para 10 milhões de linhas a abordagem em memória deve ser substituída ou limi
 
 ## Cobertura de Testes
 
-Os testes cobrem parsing de datas, parsing de valores monetários, normalização de cidades, joins, cálculo de atraso, tratamento de entregas órfãs, política de duplicidades, execução com arquivos vazios, idempotência dos artefatos e saída de indicadores.
+Os testes cobrem parsing de datas, parsing de valores monetários BR/US, normalização de cidades, joins, cálculo de atraso, tratamento de entregas órfãs, política de duplicidades, execução com arquivos vazios, idempotência dos artefatos e saída de indicadores.
 
 ## Organização Do Projeto Python
 
@@ -154,6 +156,7 @@ P002,Bruno Lima,Maceio,AL,80.00,pendente,2026-04-19,2026-04-22,2026-04-24,2,entr
 - cidade é normalizada para chave de agrupamento, não para preservar grafia original;
 - `id_entrega` e `data_cadastro` são aceitos e preservados na fronteira de entrada, mas não entram no consolidado porque o relatório final é por pedido;
 - entrega órfã não cria pedido consolidado;
+- entrega pendente e pedido cancelado não entram no cálculo de percentual de prazo;
 - pedido sem cliente é rejeitado na etapa de join;
 - a primeira linha válida vence em caso de duplicidade;
 - o pipeline sobrescreve os artefatos de saída em toda execução.
