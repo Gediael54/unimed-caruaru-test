@@ -3,6 +3,7 @@ using TaskBoard.Api.Infrastructure;
 
 namespace TaskBoard.Api.Tests;
 
+[Trait("Scope", "Api")]
 public sealed class InfrastructureTests
 {
     [Fact]
