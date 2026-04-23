@@ -39,6 +39,24 @@ A stack segue a sugestão do enunciado (C# / .NET, React + TypeScript, Python) p
 - Na `kata-2`, .NET entrega API HTTP em camadas com contratos e testes de integração.
 - Na `kata-4`, Python volta a ser a escolha natural para parsing, normalização e consolidação de dados.
 
+### Organização Das Katas Em Python
+
+Nas Katas 1 e 4, a implementação Python foi organizada no formato:
+
+- `src/...`: código de domínio e aplicação;
+- `tests/...`: suíte automatizada;
+- `pyproject.toml`: metadados do projeto;
+- wrappers finos na raiz do kata (`verify.py`, `explore.py`, `pipeline.py`, `triage.py`) para preservar os comandos documentados no runner, no README e no showcase.
+
+Essa decisão resolve uma ambiguidade importante de apresentação: a lógica principal deixa de parecer um conjunto de scripts soltos e passa a ficar explícita como código de projeto. Ao mesmo tempo, os wrappers evitam retrabalho desnecessário no fluxo de avaliação já documentado.
+
+Trade-off:
+
+- ganho: a estrutura fica mais próxima de um projeto Python real;
+- ganho: a implementação fica separada da camada de execução/manual;
+- custo: existe uma camada extra de compatibilidade na raiz dos katas;
+- custo: a navegação passa a ter mais arquivos do que a versão mais plana.
+
 ## Instruções para Executar Cada Kata Localmente
 
 Há **três caminhos** para revisar e executar o projeto. A ordem recomendada é
@@ -46,8 +64,7 @@ esta:
 
 1. **Showcase (recomendado para avaliação):** ponto de entrada visual do
    repositório.
-2. **Runner interativo em terminal:** fluxo em `bash` com menu, atalhos e
-   identidade visual.
+2. **Runner interativo em terminal:** fluxo em `bash` (Linux/macOS/WSL/Git Bash) ou em `cmd` (Windows nativo), com menu, atalhos e identidade visual.
 3. **Caminho manual por kata:** comandos diretos, explícitos e sem abstração.
 
 Essa ordem foi escolhida de propósito para evitar que a camada de apresentação
@@ -55,34 +72,51 @@ se perca na leitura do repositório:
 
 - o `showcase/` é a forma mais simples de entender rapidamente o conjunto da
   entrega;
-- o runner em `bash` é o segundo caminho recomendado para quem quer operar o
-  projeto com suporte de menu e atalhos;
+- o runner é o segundo caminho recomendado para quem quer operar o projeto com
+  suporte de menu e atalhos;
 - o caminho manual fica documentado para quem prefere inspecionar e executar
   tudo diretamente.
 
-O runner, o menu e o `bash scripts/kata.sh help` marcam com `*` exatamente os
-comandos que atendem ao que o enunciado pede. Todo item sem `*` é um extra que
-adicionei para facilitar a avaliação.
+O runner, o menu e o `bash scripts/kata.sh help` (ou `scripts\kata.cmd` no
+Windows) marcam com `*` exatamente os comandos que atendem ao que o enunciado
+pede. Todo item sem `*` é um extra que adicionei para facilitar a avaliação.
+
+### Compatibilidade por Sistema Operacional
+
+O repositório foi preparado para funcionar em três cenários: Unix-like, Git
+Bash no Windows e Windows nativo sem dependência de `bash`. A tabela abaixo
+resume o que usar em cada caso para os fluxos que o enunciado pede:
+
+| Fluxo | Linux / macOS / WSL2 | Git Bash no Windows | CMD / PowerShell no Windows |
+| --- | --- | --- | --- |
+| Runner com menu visual | `bash scripts/kata.sh` | `bash scripts/kata.sh` | `scripts\kata.cmd` (sem menu interativo; passe escopo e ação) |
+| Kata 1 — testes | `bash scripts/kata.sh kata1 tests` | mesmo comando | `scripts\kata.cmd kata1 tests` |
+| Kata 1 — demo | `bash scripts/kata.sh kata1 demo` | mesmo comando | `scripts\kata.cmd kata1 demo` |
+| Kata 2 — backend + frontend | `bash scripts/kata.sh kata2 dev` | mesmo comando | `scripts\kata.cmd kata2 dev` (abre duas janelas) ou `kata2 backend-dev` + `kata2 frontend-dev` em janelas separadas |
+| Kata 2 — suite offline | `bash scripts/kata.sh kata2 all` | mesmo comando | `scripts\kata.cmd kata2 all` |
+| Kata 4 — pipeline | `bash scripts/kata.sh kata4 pipeline` | mesmo comando | `scripts\kata.cmd kata4 pipeline` |
+| Kata 4 — testes | `bash scripts/kata.sh kata4 tests` | mesmo comando | `scripts\kata.cmd kata4 tests` |
+| Showcase — servir portal | `bash scripts/kata.sh showcase serve` | mesmo comando | `scripts\kata.cmd showcase serve` ou `showcase\start.cmd` |
+| Showcase — testes | `bash scripts/kata.sh showcase tests` | mesmo comando | `scripts\kata.cmd showcase tests` ou `showcase\tests.cmd` |
+| Validar tudo | `bash scripts/kata.sh all validate` | mesmo comando | `scripts\kata.cmd all validate` |
+
+Diferenças a ter em mente:
+
+- **Git Bash no Windows** consome o mesmo `scripts/kata.sh` usado em Linux/macOS/WSL e renderiza o visual completo (cores ANSI, menu interativo). É o caminho recomendado quando o avaliador estiver no Windows mas quiser a mesma experiência do terminal Unix-like.
+- **CMD / PowerShell no Windows** usam `scripts\kata.cmd`, que é um equivalente funcional mas sem menu interativo: passe escopo e ação direto (`scripts\kata.cmd kata1 tests`). O fluxo unificado com health check (`kata2 dev`) em `bash` usa `trap` e `curl`; no `.cmd`, o equivalente apenas abre duas janelas separadas com backend e frontend — mantém a funcionalidade sem exigir shell POSIX.
+- **Showcase** é a única camada que tem atalhos `.cmd` dedicados (`showcase\start.cmd`, `showcase\tests.cmd`), justamente para sustentar o cenário "avaliador sem `bash`".
+- **Scripts Python das Katas 1 e 4** usam apenas `pathlib` e a stdlib, então rodam identicamente em Linux/macOS/Windows.
 
 ### Pré-requisitos
 
-**Terminal compatível.** O runner usa `bash`, códigos ANSI de cor e UTF-8. Compatível com:
-
-- Linux, macOS e WSL2 — qualquer terminal moderno funciona (GNOME Terminal, iTerm2, Alacritty, Windows Terminal + WSL, etc.).
-- Windows nativo — use **WSL2** ou **Git Bash**. `cmd.exe` e PowerShell não renderizam o visual corretamente e podem quebrar comandos bash.
-
-**Importante para Windows:** essa limitação vale para o runner em `bash`. O
-`showcase/` pode ser aberto de forma nativa no Windows, sem Git Bash nem WSL,
-pelos atalhos `showcase\start.cmd` e `showcase\tests.cmd`.
-
 **Ferramentas de linha de comando:**
 
-- `python3` — para Katas 1 e 4.
+- `python3` — para Katas 1, 4 e showcase (no Windows, o instalador oficial disponibiliza tanto `python` quanto o launcher `py`; o runner detecta os dois).
 - `dotnet` — para backend da Kata 2.
 - `npm` — para frontend da Kata 2.
-- `curl` — usado pelo comando unificado `kata2 dev` para aguardar o health check do backend.
+- `curl` — usado pelo comando unificado `kata2 dev` (apenas em `bash`) para aguardar o health check do backend. No Windows 10+ já vem embutido em `cmd`; em versões antigas, é opcional.
 
-O menu principal (`bash scripts/kata.sh`) detecta e exibe a versão de cada ferramenta no topo, para confirmar o que está disponível antes de rodar.
+O menu principal (`bash scripts/kata.sh`) detecta e exibe a versão de cada ferramenta no topo, para confirmar o que está disponível antes de rodar. O `scripts\kata.cmd` falha explicitamente com mensagem clara quando uma ferramenta necessária não está no `PATH`.
 
 ### Showcase do Repositorio
 
@@ -186,6 +220,13 @@ comandos manuais por kata estão documentados nas seções abaixo.
 
 ### Kata 1 — Fila de Triagem
 
+Estrutura atual da kata:
+
+- implementação real em `kata-1/src/triage_queue/`;
+- testes em `kata-1/tests/`;
+- wrappers compatíveis na raiz (`kata-1/triage.py`, `kata-1/verify.py`, `kata-1/explore.py`);
+- metadados do projeto em `kata-1/pyproject.toml`.
+
 Comandos obrigatórios pelo enunciado:
 
 ```bash
@@ -203,6 +244,13 @@ bash scripts/kata.sh kata1 tests   # obrigatório
 bash scripts/kata.sh kata1 demo    # obrigatório
 ```
 
+No Windows nativo (sem Git Bash):
+
+```text
+scripts\kata.cmd kata1 tests
+scripts\kata.cmd kata1 demo
+```
+
 Extras adicionados para a revisão:
 
 ```bash
@@ -211,6 +259,8 @@ bash scripts/kata.sh kata1 verify-verbose   # validação completa detalhada
 bash scripts/kata.sh kata1 benchmark        # projeção de escala
 bash scripts/kata.sh kata1 explore          # explorer interativo de casos e volume
 ```
+
+Os mesmos extras ficam disponíveis em Windows nativo trocando `bash scripts/kata.sh` por `scripts\kata.cmd`.
 
 Análise escrita: `kata-1/ANALISE.md`. Esquema SQL opcional: `kata-1/schema.sql`.
 
@@ -268,6 +318,21 @@ bash scripts/kata.sh
 ```
 
 No menu principal, escolha `[1] Kata 2 · backend + frontend em um comando`, ou entre no submenu da Kata 2 com `[b]`.
+
+#### Forma 4 · Windows nativo sem `bash`
+
+```text
+scripts\kata.cmd kata2 dev
+```
+
+Esse comando abre duas janelas separadas (uma com `dotnet run`, outra com `npm run dev`). Alternativas manuais:
+
+```text
+scripts\kata.cmd kata2 backend-dev
+scripts\kata.cmd kata2 frontend-dev
+```
+
+Trade-off do `.cmd`: o `trap` e o health check via `curl` do fluxo `bash` não existem em CMD puro; abrir janelas separadas preserva os dois serviços independentes e deixa os logs visíveis. Se o avaliador quiser a experiência completa (cores, menu, health check) no Windows, basta usar Git Bash.
 
 #### Endpoints expostos pelo backend
 
@@ -327,6 +392,13 @@ Não há código a executar. Leia o plano de ação:
 
 ### Kata 4 — Pipeline de Indicadores
 
+Estrutura atual da kata:
+
+- implementação real em `kata-4/src/report_pipeline/`;
+- testes em `kata-4/tests/`;
+- wrapper compatível na raiz em `kata-4/pipeline.py`;
+- metadados do projeto em `kata-4/pyproject.toml`.
+
 Comandos obrigatórios pelo enunciado:
 
 ```bash
@@ -344,6 +416,13 @@ bash scripts/kata.sh kata4 pipeline   # obrigatório
 bash scripts/kata.sh kata4 tests      # obrigatório
 ```
 
+No Windows nativo (sem Git Bash):
+
+```text
+scripts\kata.cmd kata4 pipeline
+scripts\kata.cmd kata4 tests
+```
+
 O pipeline gera:
 
 - `kata-4/output/consolidated.csv`
@@ -357,6 +436,12 @@ Forma mais curta — executa as suítes automatizáveis das Katas 1, 2 e 4:
 
 ```bash
 bash scripts/kata.sh all validate
+```
+
+No Windows nativo (sem Git Bash):
+
+```text
+scripts\kata.cmd all validate
 ```
 
 Fluxo manual equivalente:
