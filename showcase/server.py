@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -30,8 +31,12 @@ HOST = "127.0.0.1"
 PORT = 8787
 SERVER_NAIVE_BUDGET_MS = 3_000
 PROGRESS_BATCH_SIZE = 25
+VOLUME_API_LIMIT = 20_000
+MAX_JSON_BODY_BYTES = 4_096
 MAX_COMMAND_OUTPUT_CHARS = 20_000
 ANSI_ESCAPE_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+COMMAND_OUTPUT_TRUNCATION_PREFIX = "[...saida truncada para manter a UI legivel...]\n"
+ACTIVE_COMMAND_STATUSES = {"queued", "running"}
 SHOWCASE_ASSET_VERSION_TOKEN = "__SHOWCASE_ASSET_VERSION__"
 SHOWCASE_ASSET_PATHS = (
     "index.html",
@@ -80,6 +85,37 @@ def runner_argv(*parts: str) -> list[str]:
     if not BASH_RUNNER_HOST:
         return ["cmd", "/c", "scripts\\kata.cmd", *parts]
     return ["bash", "scripts/kata.sh", *parts]
+
+
+def command_process_kwargs() -> dict[str, object]:
+    if WINDOWS_HOST:
+        creation_flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        return {"creationflags": creation_flags} if creation_flags else {}
+    return {"start_new_session": True}
+
+
+def terminate_command_process(process: subprocess.Popen[str], *, force: bool) -> None:
+    pid = getattr(process, "pid", None)
+    if WINDOWS_HOST and pid:
+        command = ["taskkill", "/PID", str(pid), "/T"]
+        if force:
+            command.append("/F")
+        try:
+            subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            return
+        except OSError:
+            pass
+
+    if not WINDOWS_HOST and pid:
+        try:
+            os.killpg(pid, signal.SIGKILL if force else signal.SIGTERM)
+            return
+        except OSError:
+            pass
+
+    fallback = getattr(process, "kill" if force else "terminate", None)
+    if fallback is not None:
+        fallback()
 
 
 def python_command(*parts: str) -> str:
@@ -183,8 +219,9 @@ COMMAND_SPECS = [
         "manual_command": (
             "dotnet restore kata-2/backend.tests/TaskBoard.Api.Tests.csproj\n"
             "dotnet build kata-2/backend/TaskBoard.Api.csproj --no-restore\n"
-            "dotnet run --project kata-2/backend.tests/TaskBoard.Api.Tests.csproj --no-restore -- backend\n"
-            "dotnet run --project kata-2/backend.tests/TaskBoard.Api.Tests.csproj --no-restore -- api\n"
+            "dotnet test kata-2/backend.tests/TaskBoard.Api.Tests.csproj --filter Scope=Backend --no-restore\n"
+            "dotnet test kata-2/backend.tests/TaskBoard.Api.Tests.csproj --filter Scope=Api --no-restore\n"
+            "npm --prefix kata-2/frontend ci\n"
             "npm --prefix kata-2/frontend run lint\n"
             "npm --prefix kata-2/frontend run test\n"
             "npm --prefix kata-2/frontend run build"
@@ -204,7 +241,7 @@ COMMAND_SPECS = [
         "title": "Kata 2 · Testes do backend",
         "description": "Roda os testes de regra do backend .NET.",
         "runner_command": runner_command("kata2", "backend-tests"),
-        "manual_command": "dotnet run --project kata-2/backend.tests/TaskBoard.Api.Tests.csproj --no-restore -- backend",
+        "manual_command": "dotnet test kata-2/backend.tests/TaskBoard.Api.Tests.csproj --filter Scope=Backend --no-restore",
         "runnable": True,
         "recommended": False,
         "artifacts": [],
@@ -217,7 +254,7 @@ COMMAND_SPECS = [
         "title": "Kata 2 · Testes de contrato HTTP",
         "description": "Valida o contrato exposto pela API .NET.",
         "runner_command": runner_command("kata2", "api-tests"),
-        "manual_command": "dotnet run --project kata-2/backend.tests/TaskBoard.Api.Tests.csproj --no-restore -- api",
+        "manual_command": "dotnet test kata-2/backend.tests/TaskBoard.Api.Tests.csproj --filter Scope=Api --no-restore",
         "runnable": True,
         "recommended": False,
         "artifacts": [],
@@ -333,20 +370,59 @@ def trim_output(text: str) -> str:
     if len(text) <= MAX_COMMAND_OUTPUT_CHARS:
         return text
     kept = text[-MAX_COMMAND_OUTPUT_CHARS:]
-    return "[...saida truncada para manter a UI legivel...]\n" + kept
+    return COMMAND_OUTPUT_TRUNCATION_PREFIX + kept
+
+
+def summarize_command_tail(
+    output_tail: str,
+    *,
+    total_chars: int,
+    total_lines: int,
+    has_ansi: bool,
+) -> dict[str, object]:
+    output_truncated = total_chars > len(output_tail)
+    return {
+        "output": COMMAND_OUTPUT_TRUNCATION_PREFIX + output_tail if output_truncated else output_tail,
+        "output_format": "ansi" if has_ansi else "plain",
+        "output_truncated": output_truncated,
+        "output_char_count": total_chars,
+        "output_line_count": total_lines,
+    }
 
 
 def summarize_command_output(text: str) -> dict[str, object]:
     raw_output = text or ""
-    trimmed_output = trim_output(raw_output)
     non_empty_lines = [line for line in raw_output.splitlines() if line.strip()]
-    return {
-        "output": trimmed_output,
-        "output_format": "ansi" if ANSI_ESCAPE_RE.search(raw_output) else "plain",
-        "output_truncated": len(trimmed_output) != len(raw_output),
-        "output_char_count": len(raw_output),
-        "output_line_count": len(non_empty_lines),
-    }
+    return summarize_command_tail(
+        raw_output[-MAX_COMMAND_OUTPUT_CHARS:] if len(raw_output) > MAX_COMMAND_OUTPUT_CHARS else raw_output,
+        total_chars=len(raw_output),
+        total_lines=len(non_empty_lines),
+        has_ansi=bool(ANSI_ESCAPE_RE.search(raw_output)),
+    )
+
+
+class CommandOutputBuffer:
+    def __init__(self) -> None:
+        self.tail = ""
+        self.total_chars = 0
+        self.total_lines = 0
+        self.has_ansi = False
+
+    def append(self, chunk: str) -> None:
+        if not chunk:
+            return
+        self.total_chars += len(chunk)
+        self.total_lines += len([line for line in chunk.splitlines() if line.strip()])
+        self.has_ansi = self.has_ansi or bool(ANSI_ESCAPE_RE.search(chunk))
+        self.tail = (self.tail + chunk)[-MAX_COMMAND_OUTPUT_CHARS:]
+
+    def summary(self) -> dict[str, object]:
+        return summarize_command_tail(
+            self.tail,
+            total_chars=self.total_chars,
+            total_lines=self.total_lines,
+            has_ansi=self.has_ansi,
+        )
 
 
 def build_command_run(run_id: str, spec: dict[str, object]) -> dict[str, object]:
@@ -477,8 +553,30 @@ def estimate_naive_duration_ms(elapsed_ms: float, processed: int, total: int) ->
     return elapsed_ms * (complexity_units(total) / complexity_units(safe_processed))
 
 
+def parse_simulation_count(payload: dict[str, object]) -> int:
+    raw_count = payload.get("count")
+    if isinstance(raw_count, bool):
+        raise ValueError("count must be an integer")
+    try:
+        count = int(raw_count)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise ValueError("count must be an integer") from exc
+
+    if count <= 0:
+        raise ValueError("count must be positive")
+    if count > VOLUME_API_LIMIT:
+        raise ValueError(f"count must be at most {VOLUME_API_LIMIT}")
+    return count
+
+
 class CancelledJobError(RuntimeError):
     pass
+
+
+class CommandRunAlreadyActiveError(RuntimeError):
+    def __init__(self, active_run: dict[str, object]) -> None:
+        super().__init__("another command run is already active")
+        self.active_run = active_run
 
 
 class SimulationJobs:
@@ -677,6 +775,12 @@ class CommandRuns:
         job = self._jobs.get(run_id)
         return dict(job) if job is not None else None
 
+    def _active_run(self) -> dict[str, object] | None:
+        for job in self._jobs.values():
+            if job.get("status") in ACTIVE_COMMAND_STATUSES and not bool(job.get("cancelled")):
+                return dict(job)
+        return None
+
     def _update(self, run_id: str, **fields: object) -> dict[str, object]:
         job = self._jobs[run_id]
         fields["updated_at"] = now_iso()
@@ -684,7 +788,9 @@ class CommandRuns:
         return dict(job)
 
     def _update_output_snapshot(self, run_id: str, output: str, **fields: object) -> dict[str, object]:
-        return self._update(run_id, **summarize_command_output(output), **fields)
+        output_summary = summarize_command_output(output)
+        output_summary.update(fields)
+        return self._update(run_id, **output_summary)
 
     def create(self, command_id: str) -> str:
         spec = COMMANDS_BY_ID.get(command_id)
@@ -693,8 +799,12 @@ class CommandRuns:
         if not bool(spec.get("runnable")):
             raise ValueError(command_id)
 
-        run_id = str(uuid.uuid4())
         with self._lock:
+            active_run = self._active_run()
+            if active_run is not None:
+                raise CommandRunAlreadyActiveError(active_run)
+
+            run_id = str(uuid.uuid4())
             self._jobs[run_id] = build_command_run(run_id, spec)
 
         threading.Thread(target=self._run, args=(run_id, spec), daemon=True).start()
@@ -733,10 +843,10 @@ class CommandRuns:
                     updated_at=now_iso(),
                 )
         if process is not None:
-            process.terminate()
+            terminate_command_process(process, force=False)
         return self.get(run_id)
 
-    def _stream_process_output(self, run_id: str, process: subprocess.Popen[str], timeout_s: int) -> tuple[str, bool]:
+    def _stream_process_output(self, run_id: str, process: subprocess.Popen[str], timeout_s: int) -> tuple[dict[str, object], bool]:
         stdout = getattr(process, "stdout", None)
         if stdout is None or not hasattr(process, "wait"):
             timed_out = False
@@ -744,11 +854,11 @@ class CommandRuns:
                 output, _ = process.communicate(timeout=timeout_s)
             except subprocess.TimeoutExpired:
                 timed_out = True
-                process.kill()
+                terminate_command_process(process, force=True)
                 output, _ = process.communicate()
-            return output, timed_out
+            return summarize_command_output(output), timed_out
 
-        output_chunks: list[str] = []
+        output_buffer = CommandOutputBuffer()
         output_lock = threading.Lock()
         reader_done = threading.Event()
 
@@ -758,18 +868,18 @@ class CommandRuns:
                     if chunk == "":
                         break
                     with output_lock:
-                        output_chunks.append(chunk)
-                        combined = "".join(output_chunks)
+                        output_buffer.append(chunk)
+                        output_summary = output_buffer.summary()
                     with self._lock:
                         if run_id in self._jobs:
-                            self._update_output_snapshot(
+                            self._update(
                                 run_id,
-                                combined,
                                 stage_label="Processo em execução · saída parcial recebida",
                                 note="a API local está publicando o retorno parcial do terminal",
                                 is_running=True,
                                 can_cancel=True,
                                 output_complete=False,
+                                **output_summary,
                             )
             finally:
                 reader_done.set()
@@ -781,7 +891,7 @@ class CommandRuns:
             process.wait(timeout=timeout_s)
         except subprocess.TimeoutExpired:
             timed_out = True
-            process.kill()
+            terminate_command_process(process, force=True)
 
         reader_done.wait(timeout=1.5)
         remainder = ""
@@ -792,10 +902,10 @@ class CommandRuns:
 
         with output_lock:
             if remainder:
-                output_chunks.append(remainder)
-            combined = "".join(output_chunks)
+                output_buffer.append(remainder)
+            output_summary = output_buffer.summary()
 
-        return combined, timed_out
+        return output_summary, timed_out
 
     def _run(self, run_id: str, spec: dict[str, object]) -> None:
         start = perf_counter()
@@ -836,6 +946,7 @@ class CommandRuns:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                **command_process_kwargs(),
             )
             with self._lock:
                 self._processes[run_id] = process
@@ -845,7 +956,7 @@ class CommandRuns:
                     stage_label="Processo iniciado · aguardando saída",
                 )
 
-            output, timed_out = self._stream_process_output(
+            output_summary, timed_out = self._stream_process_output(
                 run_id,
                 process,
                 int(spec["timeout_s"]),
@@ -864,7 +975,7 @@ class CommandRuns:
                     "is_running": False,
                     "can_cancel": False,
                     "output_complete": True,
-                    **summarize_command_output(output),
+                    **output_summary,
                 }
                 if timed_out:
                     final_fields.update(
@@ -890,6 +1001,7 @@ class CommandRuns:
                         stage_label="Execução com falha",
                         note="o comando terminou com código de erro",
                     )
+                self._processes.pop(run_id, None)
                 self._update(run_id, **final_fields)
         except Exception as exc:  # pragma: no cover
             with self._lock:
@@ -993,10 +1105,11 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         if parsed.path == "/api/triage-simulations":
-            payload = self._read_json()
-            count = int(payload.get("count", 0))
-            if count <= 0:
-                self._write_json(HTTPStatus.BAD_REQUEST, {"error": "count must be positive"})
+            try:
+                payload = self._read_json()
+                count = parse_simulation_count(payload)
+            except ValueError as exc:
+                self._write_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
                 return
             job_id = SIMULATION_JOBS.create(count)
             self._write_json(HTTPStatus.ACCEPTED, {"job_id": job_id})
@@ -1012,13 +1125,23 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/command-runs":
-            payload = self._read_json()
+            try:
+                payload = self._read_json()
+            except ValueError as exc:
+                self._write_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
             command_id = str(payload.get("command_id", "")).strip()
             if not command_id:
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "command_id is required"})
                 return
             try:
                 run_id = COMMAND_RUNS.create(command_id)
+            except CommandRunAlreadyActiveError as exc:
+                self._write_json(
+                    HTTPStatus.CONFLICT,
+                    {"error": "another command run is already active", "run": exc.active_run},
+                )
+                return
             except KeyError:
                 self._write_json(HTTPStatus.NOT_FOUND, {"error": "command not found"})
                 return
@@ -1046,11 +1169,22 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
         self._write_json(HTTPStatus.NOT_FOUND, {"error": "unsupported endpoint"})
 
     def _read_json(self) -> dict[str, object]:
-        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise ValueError("invalid Content-Length") from exc
+        if length > MAX_JSON_BODY_BYTES:
+            raise ValueError("request body is too large")
         raw = self.rfile.read(length) if length else b"{}"
         if not raw:
             return {}
-        return json.loads(raw.decode("utf-8"))
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("invalid JSON body") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("JSON body must be an object")
+        return payload
 
     def _write_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
         body = json.dumps(payload).encode("utf-8")
