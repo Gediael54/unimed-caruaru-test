@@ -15,7 +15,7 @@ Se voce quer o mapa do repositorio inteiro, volte para `../README.md`.
 
 1. este `README.md` para ver estrutura e comandos;
 2. `ANALISE.md` para entender decisoes de modelagem, SQL e benchmark;
-3. `verify.py --mode demo` ou `bash scripts/kata.sh kata1 demo`;
+3. `python3 verify.py --mode demo` ou `bash scripts/kata.sh kata1 demo`;
 4. `src/triage_queue/domain.py` para a regra principal;
 5. `tests/test_triage.py` para a cobertura automatizada;
 6. `schema.sql` para a leitura SQL equivalente.
