@@ -49,6 +49,7 @@ class PipelineParsingTests(unittest.TestCase):
         self.assertEqual(parse_money("120,50"), Decimal("120.50"))
         self.assertEqual(parse_money("120.50"), Decimal("120.50"))
         self.assertEqual(parse_money("1.250,75"), Decimal("1250.75"))
+        self.assertEqual(parse_money("1,250.75"), Decimal("1250.75"))
 
     def test_money_parser_rejects_blank_and_invalid_values(self) -> None:
         with self.assertRaises(ValueError):
@@ -310,6 +311,37 @@ class PipelineIntegrationTests(unittest.TestCase):
             self.assertEqual(indicators["top_3_cities_by_order_volume"], [])
             self.assertFalse((output_dir / "rejected.csv").exists())
 
+    def test_blank_delivery_status_defaults_to_without_delivery(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_dir = root / "data"
+            output_dir = root / "output"
+
+            self._write_csv_set(
+                data_dir,
+                pedidos=[
+                    "id_pedido,data_pedido,id_cliente,valor_total,status",
+                    "P001,2026-04-20,C001,100.00,pago",
+                ],
+                clientes=[
+                    "id_cliente,nome,cidade,estado,data_cadastro",
+                    "C001,Ana Silva,Caruaru,PE,2024-01-10",
+                ],
+                entregas=[
+                    "id_entrega,id_pedido,data_prevista,data_realizada,status_entrega",
+                    "E001,P001,2026-04-22,2026-04-22,   ",
+                ],
+            )
+
+            run_pipeline(data_dir, output_dir)
+
+            with (output_dir / "consolidated.csv").open(
+                "r", encoding="utf-8", newline=""
+            ) as file:
+                rows = list(csv.DictReader(file))
+
+            self.assertEqual(rows[0]["status_entrega"], "sem_entrega")
+
     def test_pipeline_joins_data_and_writes_indicators(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -465,6 +497,39 @@ class PipelineIntegrationTests(unittest.TestCase):
             self.assertEqual(indicators["delivery_percentages"]["on_time"], 50.0)
             self.assertEqual(indicators["delivery_percentages"]["delayed"], 50.0)
             self.assertEqual(indicators["delivered_without_expected_date"], 1)
+
+    def test_cancelled_orders_and_pending_deliveries_do_not_enter_delivery_ratio(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_dir = root / "data"
+            output_dir = root / "output"
+
+            self._write_csv_set(
+                data_dir,
+                pedidos=[
+                    "id_pedido,data_pedido,id_cliente,valor_total,status",
+                    "P001,2026-04-18,C001,100.00,pago",
+                    "P002,2026-04-18,C001,100.00,pago",
+                    "P003,2026-04-18,C001,100.00,cancelado",
+                    "P004,2026-04-18,C001,100.00,pago",
+                ],
+                clientes=[
+                    "id_cliente,nome,cidade,estado,data_cadastro",
+                    "C001,Ana Silva,Caruaru,PE,2024-01-10",
+                ],
+                entregas=[
+                    "id_entrega,id_pedido,data_prevista,data_realizada,status_entrega",
+                    "E001,P001,2026-04-20,2026-04-20,entregue",
+                    "E002,P002,2026-04-20,2026-04-22,entregue",
+                    "E003,P003,2026-04-20,2026-04-20,entregue",
+                    "E004,P004,2026-04-20,2026-04-20,pendente",
+                ],
+            )
+
+            indicators = run_pipeline(data_dir, output_dir)
+
+            self.assertEqual(indicators["delivery_percentages"]["on_time"], 50.0)
+            self.assertEqual(indicators["delivery_percentages"]["delayed"], 50.0)
 
     def test_rejected_overflow_truncates_json_and_writes_full_csv(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
