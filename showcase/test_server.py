@@ -71,6 +71,14 @@ class ShowcaseHelpersTests(unittest.TestCase):
         self.assertEqual(summary["output_char_count"], len("\x1b[32mok\x1b[0m\nlinha 2\n"))
         self.assertFalse(summary["output_truncated"])
 
+    def test_parse_simulation_count_rejects_invalid_or_oversized_values(self) -> None:
+        self.assertEqual(server.parse_simulation_count({"count": "25"}), 25)
+        for payload in ({}, {"count": "x"}, {"count": 0}, {"count": -1}, {"count": True}):
+            with self.assertRaises(ValueError):
+                server.parse_simulation_count(payload)
+        with self.assertRaises(ValueError):
+            server.parse_simulation_count({"count": server.VOLUME_API_LIMIT + 1})
+
     def test_public_doc_spec_hides_content(self) -> None:
         spec = server.public_doc_spec(server.DOC_SPECS[0])
 
@@ -208,6 +216,14 @@ class CommandRunsTests(unittest.TestCase):
         self.assertIsNone(run["finished_at"])
         self.assertTrue(started["started"])
         self.assertEqual(started["args"][0], "run-fixed")
+
+    def test_create_rejects_when_another_run_is_active(self) -> None:
+        self.runs._jobs["run-active"] = server.build_command_run("run-active", server.COMMANDS_BY_ID["repo-help"])
+
+        with self.assertRaises(server.CommandRunAlreadyActiveError) as ctx:
+            self.runs.create("kata1-tests")
+
+        self.assertEqual(ctx.exception.active_run["run_id"], "run-active")
 
     def test_build_command_run_keeps_access_links(self) -> None:
         run = server.build_command_run("run-1", server.COMMANDS_BY_ID["kata2-dev"])
@@ -361,6 +377,38 @@ class CommandRunsTests(unittest.TestCase):
         self.assertFalse(run["is_running"])
         self.assertIsNotNone(run["finished_at"])
 
+    def test_stream_process_output_keeps_bounded_tail(self) -> None:
+        class FakeStdout:
+            def __init__(self) -> None:
+                self.chunks = iter(["x" * (server.MAX_COMMAND_OUTPUT_CHARS + 50), "\n"])
+
+            def readline(self) -> str:
+                return next(self.chunks, "")
+
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdout = FakeStdout()
+                self.returncode = 0
+                self.pid = 9876
+
+            def wait(self, timeout=None):  # noqa: ANN001
+                return 0
+
+            def communicate(self, timeout=None):  # noqa: ANN001
+                return ("", "")
+
+        self.runs._jobs["run-stream"] = server.build_command_run("run-stream", server.COMMANDS_BY_ID["repo-help"])
+
+        output_summary, timed_out = self.runs._stream_process_output("run-stream", FakeProcess(), timeout_s=1)
+
+        self.assertFalse(timed_out)
+        self.assertTrue(output_summary["output_truncated"])
+        self.assertEqual(output_summary["output_char_count"], server.MAX_COMMAND_OUTPUT_CHARS + 51)
+        self.assertLessEqual(
+            len(output_summary["output"]),
+            server.MAX_COMMAND_OUTPUT_CHARS + len(server.COMMAND_OUTPUT_TRUNCATION_PREFIX),
+        )
+
 
 class ShowcaseHandlerTests(unittest.TestCase):
     def make_handler(self, path: str, body: bytes = b"{}") -> server.ShowcaseHandler:
@@ -488,6 +536,16 @@ class ShowcaseHandlerTests(unittest.TestCase):
         self.assertEqual(captured["status"], server.HTTPStatus.BAD_REQUEST)
         self.assertEqual(captured["payload"]["error"], "command_id is required")
 
+    def test_post_command_run_rejects_invalid_json(self) -> None:
+        handler = self.make_handler("/api/command-runs", body=b"{")
+        captured: dict[str, object] = {}
+        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
+
+        server.ShowcaseHandler.do_POST(handler)
+
+        self.assertEqual(captured["status"], server.HTTPStatus.BAD_REQUEST)
+        self.assertEqual(captured["payload"]["error"], "invalid JSON body")
+
     def test_post_command_run_returns_not_found_for_unknown_command(self) -> None:
         handler = self.make_handler("/api/command-runs", body=b'{"command_id":"missing"}')
         captured: dict[str, object] = {}
@@ -507,6 +565,18 @@ class ShowcaseHandlerTests(unittest.TestCase):
             server.ShowcaseHandler.do_POST(handler)
 
         self.assertEqual(captured["status"], server.HTTPStatus.BAD_REQUEST)
+
+    def test_post_command_run_returns_conflict_for_active_run(self) -> None:
+        handler = self.make_handler("/api/command-runs", body=b'{"command_id":"repo-help"}')
+        captured: dict[str, object] = {}
+        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
+        active_run = {"run_id": "run-active", "status": "running"}
+
+        with patch.object(server.COMMAND_RUNS, "create", side_effect=server.CommandRunAlreadyActiveError(active_run)):
+            server.ShowcaseHandler.do_POST(handler)
+
+        self.assertEqual(captured["status"], server.HTTPStatus.CONFLICT)
+        self.assertEqual(captured["payload"]["run"]["run_id"], "run-active")
 
     def test_post_command_run_returns_accepted(self) -> None:
         handler = self.make_handler("/api/command-runs", body=b'{"command_id":"repo-help"}')
@@ -549,6 +619,16 @@ class ShowcaseHandlerTests(unittest.TestCase):
 
         self.assertEqual(captured["status"], server.HTTPStatus.OK)
         self.assertEqual(captured["payload"]["status"], "cancelled")
+
+    def test_post_triage_simulation_rejects_bad_count(self) -> None:
+        handler = self.make_handler("/api/triage-simulations", body=b'{"count":20001}')
+        captured: dict[str, object] = {}
+        handler._write_json = lambda status, payload: captured.update(status=status, payload=payload)  # type: ignore[method-assign]
+
+        server.ShowcaseHandler.do_POST(handler)
+
+        self.assertEqual(captured["status"], server.HTTPStatus.BAD_REQUEST)
+        self.assertIn("at most", captured["payload"]["error"])
 
 
 class MainTests(unittest.TestCase):
