@@ -219,7 +219,7 @@ ORDER BY
 
 -- -----------------------------------------------------------------------------
 -- Query exemplo reproduzindo a ordenação diretamente, sem depender da VIEW.
--- Útil para explicar a regra em relatórios, auditoria ou troubleshooting:
+-- Para explicar a regra em relatórios, auditoria ou troubleshooting:
 --
 -- SELECT
 --     e.queue_id,
