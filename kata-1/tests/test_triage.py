@@ -17,6 +17,7 @@ from triage_queue import (
     ELDERLY_PROMOTION_SOURCE_PRIORITY,
     ELDERLY_PROMOTION_TARGET_PRIORITY,
     MAX_PRIORITY,
+    MAX_AGE,
     MIN_PRIORITY,
     MINOR_AGE_THRESHOLD,
     PRIORITY_URGENCY,
@@ -180,6 +181,10 @@ class AdjustedPriorityTests(unittest.TestCase):
     def test_negative_age_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             calculate_adjusted_priority(patient("invalid", "BAIXA", 0, age=-1))
+
+    def test_age_above_schema_limit_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            calculate_adjusted_priority(patient("too-old", "BAIXA", 0, age=MAX_AGE + 1))
 
     def test_non_integer_age_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
@@ -382,6 +387,7 @@ class ConstantsSanityTests(unittest.TestCase):
     def test_domain_thresholds_match_brief(self) -> None:
         self.assertEqual(ELDERLY_AGE_THRESHOLD, 60)
         self.assertEqual(MINOR_AGE_THRESHOLD, 18)
+        self.assertEqual(MAX_AGE, 130)
 
     def test_priority_bounds(self) -> None:
         self.assertEqual(MIN_PRIORITY, URGENCY_PRIORITY["BAIXA"])
@@ -517,6 +523,36 @@ class SqlSchemaIntegrationTests(unittest.TestCase):
                 row["adjusted_urgency_computed"],
                 f"Divergence on {row['patient_name']}",
             )
+
+    def test_view_lists_only_waiting_entries(self) -> None:
+        queue_id, _ = self._seed_queue()
+        completed_entry = self.conn.execute(
+            """
+            SELECT id
+            FROM triage_queue_entries
+            WHERE queue_id = ?
+            ORDER BY sequence_number
+            LIMIT 1
+            """,
+            (queue_id,),
+        ).fetchone()["id"]
+
+        self.conn.execute(
+            "UPDATE triage_queue_entries SET status = 'COMPLETED' WHERE id = ?",
+            (completed_entry,),
+        )
+
+        statuses = self.conn.execute(
+            """
+            SELECT status
+            FROM v_triage_queue_ordered
+            WHERE queue_id = ?
+            """,
+            (queue_id,),
+        ).fetchall()
+
+        self.assertGreater(len(statuses), 0)
+        self.assertTrue(all(row["status"] == "WAITING" for row in statuses))
 
     def test_unique_patient_per_queue_constraint(self) -> None:
         queue_id, _ = self._seed_queue()
