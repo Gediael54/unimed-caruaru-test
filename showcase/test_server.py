@@ -10,15 +10,20 @@ import server
 
 class ShowcaseHelpersTests(unittest.TestCase):
     def test_runner_helpers_default_to_bash_on_non_windows(self) -> None:
-        with patch.object(server, "WINDOWS_HOST", False):
+        with patch.object(server, "BASH_RUNNER_HOST", True):
             self.assertEqual(server.runner_command("help"), "bash scripts/kata.sh help")
             self.assertEqual(server.runner_argv("kata1", "tests"), ["bash", "scripts/kata.sh", "kata1", "tests"])
             self.assertEqual(server.python_command("kata-1/verify.py"), "python3 kata-1/verify.py")
 
     def test_runner_helpers_switch_to_cmd_on_windows(self) -> None:
-        with patch.object(server, "WINDOWS_HOST", True):
+        with patch.object(server, "BASH_RUNNER_HOST", False):
             self.assertEqual(server.runner_command("help"), r"scripts\kata.cmd help")
             self.assertEqual(server.runner_argv("kata1", "tests"), ["cmd", "/c", r"scripts\kata.cmd", "kata1", "tests"])
+
+    def test_runner_helpers_keep_bash_for_git_bash_on_windows(self) -> None:
+        with patch.object(server, "WINDOWS_HOST", True), patch.object(server, "BASH_RUNNER_HOST", True):
+            self.assertEqual(server.runner_command("help"), "bash scripts/kata.sh help")
+            self.assertEqual(server.runner_argv("kata1", "tests"), ["bash", "scripts/kata.sh", "kata1", "tests"])
             self.assertEqual(server.python_command("kata-1/verify.py"), "python kata-1/verify.py")
 
     def test_public_command_spec_hides_internal_fields(self) -> None:
