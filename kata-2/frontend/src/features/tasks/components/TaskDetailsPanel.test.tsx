@@ -10,7 +10,8 @@ function makeTask(status: Task["status"], description: string | null = [
   "Prazo: 25/04/2026",
   "Labels: ux, board",
   "Checklist:",
-  "- Validar navegação"
+  "- [x] Validar navegação",
+  "- Revisar resposta visual"
 ].join("\n")): Task {
   return {
     id: "task-42",
@@ -25,23 +26,20 @@ function makeTask(status: Task["status"], description: string | null = [
 }
 
 describe("TaskDetailsPanel", () => {
-  it("renders the empty state when no card is selected", () => {
-    render(
+  it("renders nothing when no card is selected", () => {
+    const { container } = render(
       <TaskDetailsPanel
         activeTaskId={null}
         isBusy={false}
         onArchive={vi.fn(async () => {})}
         onClose={vi.fn()}
+        onEdit={vi.fn()}
         onStatusChange={vi.fn(async () => {})}
         task={null}
       />
     );
 
-    expect(
-      screen.getByRole("heading", {
-        name: "Abra um card para revisar contexto, sinais visuais e ações rápidas"
-      })
-    ).toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
   });
 
   it("renders card metadata and triggers status transition from the details panel", async () => {
@@ -55,6 +53,7 @@ describe("TaskDetailsPanel", () => {
         isBusy={false}
         onArchive={vi.fn(async () => {})}
         onClose={onClose}
+        onEdit={vi.fn()}
         onStatusChange={onStatusChange}
         task={makeTask("pending")}
       />
@@ -66,6 +65,8 @@ describe("TaskDetailsPanel", () => {
     expect(screen.getByText("ux")).toBeInTheDocument();
     expect(screen.getByText("board")).toBeInTheDocument();
     expect(screen.getByText("Validar navegação")).toBeInTheDocument();
+    expect(screen.getByText("Revisar resposta visual")).toBeInTheDocument();
+    expect(screen.getByText("1/2 concluídos")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Iniciar card" }));
     await user.click(screen.getByRole("button", { name: "Fechar painel do card" }));
@@ -81,6 +82,7 @@ describe("TaskDetailsPanel", () => {
         isBusy={false}
         onArchive={vi.fn(async () => {})}
         onClose={vi.fn()}
+        onEdit={vi.fn()}
         onStatusChange={vi.fn(async () => {})}
         task={makeTask("pending", null)}
       />
@@ -105,6 +107,7 @@ describe("TaskDetailsPanel", () => {
         isBusy={false}
         onArchive={onArchive}
         onClose={vi.fn()}
+        onEdit={vi.fn()}
         onStatusChange={onStatusChange}
         task={makeTask("in_progress")}
       />
@@ -128,6 +131,7 @@ describe("TaskDetailsPanel", () => {
         isBusy={false}
         onArchive={vi.fn(async () => {})}
         onClose={vi.fn()}
+        onEdit={vi.fn()}
         onStatusChange={onStatusChange}
         task={makeTask("completed")}
       />
@@ -141,6 +145,7 @@ describe("TaskDetailsPanel", () => {
         isBusy={false}
         onArchive={vi.fn(async () => {})}
         onClose={vi.fn()}
+        onEdit={vi.fn()}
         onStatusChange={onStatusChange}
         task={makeTask("cancelled")}
       />
@@ -159,6 +164,7 @@ describe("TaskDetailsPanel", () => {
         isBusy
         onArchive={vi.fn(async () => {})}
         onClose={vi.fn()}
+        onEdit={vi.fn()}
         onStatusChange={vi.fn(async () => {})}
         task={makeTask("pending")}
       />
@@ -177,6 +183,7 @@ describe("TaskDetailsPanel", () => {
         isBusy={false}
         onArchive={vi.fn(async () => {})}
         onClose={vi.fn()}
+        onEdit={vi.fn()}
         onStatusChange={vi.fn(async () => {})}
         task={makeTask("archived")}
       />
