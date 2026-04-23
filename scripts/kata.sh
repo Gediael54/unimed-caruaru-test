@@ -205,13 +205,14 @@ resolve_python_bin() {
     return 0
   fi
 
-  if command -v python3 >/dev/null 2>&1; then
+  if command -v python3 >/dev/null 2>&1 && \
+    python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
     PYTHON_BIN="python3"
     return 0
   fi
 
   if command -v python >/dev/null 2>&1 && \
-    python -c 'import sys; raise SystemExit(0 if sys.version_info.major >= 3 else 1)' >/dev/null 2>&1; then
+    python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
     PYTHON_BIN="python"
     return 0
   fi
@@ -235,7 +236,7 @@ print_missing_command_guidance() {
       print_info "Instale .NET SDK 10 e confirme com: dotnet --version"
       ;;
     npm|node)
-      print_info "Instale Node.js 22 LTS ou 20.19+; o npm vem junto"
+      print_info "Instale Node.js 24.14.0 ou Node.js 22.13+; o npm vem junto"
       print_info "Depois confirme com: node --version e npm --version"
       ;;
     curl)
@@ -250,7 +251,7 @@ require_python() {
     return 0
   fi
 
-  print_error "Python 3 nao encontrado no ambiente."
+  print_error "Python 3.11+ nao encontrado no ambiente."
   print_missing_command_guidance python3
   return 127
 }
@@ -274,7 +275,7 @@ require_kata2_frontend_dependencies() {
   fi
 
   print_error "Dependencias do frontend da Kata 2 ainda nao foram instaladas."
-  print_info "Rode: npm --prefix $KATA2_WEB_DIR install"
+  print_info "Rode: npm --prefix $KATA2_WEB_DIR ci"
   print_info "Ou use: bash scripts/kata.sh kata2 frontend-install"
   return 1
 }
@@ -471,14 +472,14 @@ kata2_backend_tests() {
   require_command dotnet || return $?
   require_kata2_restore || return $?
   run_step "Kata 2 · testes unitarios do backend" \
-    dotnet run --project "$KATA2_TESTS_PROJECT" --no-restore -- backend
+    dotnet test "$KATA2_TESTS_PROJECT" --filter 'Scope=Backend' --no-restore
 }
 
 kata2_api_tests() {
   require_command dotnet || return $?
   require_kata2_restore || return $?
   run_step "Kata 2 · testes de contrato da API" \
-    dotnet run --project "$KATA2_TESTS_PROJECT" --no-restore -- api
+    dotnet test "$KATA2_TESTS_PROJECT" --filter 'Scope=Api' --no-restore
 }
 
 kata2_test_suite() {
@@ -489,7 +490,7 @@ kata2_test_suite() {
 
 kata2_frontend_install() {
   require_command npm || return $?
-  run_step "Kata 2 · instalar dependencias do frontend" npm --prefix "$KATA2_WEB_DIR" install
+  run_step "Kata 2 · instalar dependencias do frontend" npm --prefix "$KATA2_WEB_DIR" ci
 }
 
 kata2_frontend_build() {
@@ -637,6 +638,7 @@ kata2_all() {
     kata2_backend_build &&
     kata2_backend_tests &&
     kata2_api_tests &&
+    kata2_frontend_install &&
     kata2_frontend_lint &&
     kata2_frontend_tests &&
     kata2_frontend_build
