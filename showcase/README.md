@@ -1,103 +1,121 @@
-# Showcase do Repositorio
+# Showcase Do Repositorio
 
-O `showcase/` e a camada visual de apoio da entrega. Ele organiza a revisao em
-tres frentes, sem expor arquivos internos:
+## Papel Deste README
 
-- `documentacao`: leitura passiva de markdown;
-- `execucao real`: chamadas permitidas pela whitelist, com retorno real da API local;
-- `exploracao/benchmark`: apoio visual para navegacao e para o benchmark da Kata 1.
+Este README explica apenas a vitrine visual do projeto:
 
-Limites desta camada:
+- o que o `showcase/` faz;
+- o que ele nao faz;
+- como subir e testar essa camada;
+- como ele se encaixa na leitura do repositorio.
 
-- nao substitui o runner `bash scripts/kata.sh`;
-- nao substitui os comandos manuais por kata;
-- nao substitui o frontend real da Kata 2;
-- nao transforma markdown em execucao;
-- nao executa fora do catalogo whitelist;
-- nao expoe codigo-fonte nem arquivos internos de trabalho.
+Se voce quer o mapa geral, use `../README.md`.
 
-Em outras palavras: o terminal continua sendo a fonte de verdade da execucao, e
-o showcase existe para melhorar a revisao do projeto.
+## Quando Usar O Showcase
 
-No Windows, o ponto de atencao principal e o runner em `bash`, nao o
-`showcase/`. A vitrine pode ser aberta nativamente por `cmd.exe` ou PowerShell
-usando os atalhos `.cmd` abaixo.
+Use o showcase quando quiser:
 
-## Como executar
+- comecar a revisao pelo mapa visual do projeto;
+- abrir documentacao sem sair do navegador;
+- executar apenas comandos permitidos pela whitelist da API local;
+- navegar pelas katas e pelo playground visual da Kata 1.
 
-Pelo runner:
+Nao use o showcase como substituto:
+
+- do runner oficial;
+- dos comandos manuais por kata;
+- do frontend real da Kata 2.
+
+O terminal continua sendo a fonte de verdade da execucao.
+
+## Ordem Recomendada De Leitura
+
+1. `../README.md` para mapa, ambiente e comandos gerais;
+2. este `showcase/README.md` para entender a vitrine;
+3. os READMEs das katas quando a revisao entrar em cada escopo.
+
+## O Que Precisa Para Rodar
+
+- `Python 3.11+`
+
+O showcase nao exige `npm install`, `pip install` ou outro frontend separado.
+
+## Como Subir
+
+### Linux, macOS, WSL ou Git Bash
 
 ```bash
 bash scripts/kata.sh showcase serve
 ```
 
-Manualmente:
+Ou manualmente:
 
 ```bash
 python3 showcase/server.py
 ```
 
-No Windows nativo:
+### Windows Nativo
 
 ```text
+scripts\kata.cmd showcase serve
 showcase\start.cmd
 ```
 
-Depois, abra `http://localhost:8787`.
+Os dois comandos acima passam pelos mesmos checks de Python e exibem a mesma mensagem de erro.
 
-## Validacao
+Depois, abra:
 
-Pelo runner:
+```text
+http://localhost:8787
+```
+
+## Como Validar
+
+### Linux, macOS, WSL ou Git Bash
 
 ```bash
 bash scripts/kata.sh showcase tests
 ```
 
-Manualmente:
+Ou manualmente:
 
 ```bash
-python3 -m unittest discover -s showcase -p 'test_*.py'
+python3 -m unittest discover -s showcase -p "test_*.py"
 ```
 
-No Windows nativo:
+### Windows Nativo
 
 ```text
+scripts\kata.cmd showcase tests
 showcase\tests.cmd
 ```
 
-## Decisao de arquitetura
+Se o Python acabou de ser instalado no Windows e ainda nao apareceu no terminal, feche o `cmd.exe` ou PowerShell, abra outro e teste `py -3 --version` ou `python --version`.
 
-O showcase foi mantido separado da Kata 2 para preservar a leitura correta do
-escopo:
+## O Que Esta Pasta Faz
+
+- serve HTML, CSS e JavaScript do portal;
+- expoe uma API local para health, docs, execucao controlada e playground;
+- limita a execucao ao catalogo de comandos permitido;
+- mostra a saida real retornada pela API local do showcase.
+
+## O Que Esta Pasta Nao Faz
+
+- nao substitui o runner;
+- nao substitui a Kata 2;
+- nao executa qualquer comando arbitrario do sistema;
+- nao vira um segundo frontend React do repositorio.
+
+## Decisao De Arquitetura
+
+O showcase foi mantido separado da Kata 2 por uma razao de leitura:
 
 - a Kata 2 continua sendo o produto full-stack avaliado;
-- o showcase permanece como infraestrutura de apresentacao do repositorio;
-- o benchmark da Kata 1 continua existindo como exploracao dedicada, sem virar fonte de verdade da execucao.
+- o showcase continua sendo infraestrutura de apresentacao;
+- isso evita misturar "portal de revisao" com "produto da prova".
 
-### Por que o showcase nao virou um frontend em React
+Em resumo:
 
-Escolhi **nao transformar o showcase em um segundo frontend React** por uma
-decisao de escopo e de leitura da entrega.
-
-Motivos principais:
-
-- o frontend que precisa ser avaliado como produto da prova ja esta na `kata-2/frontend`;
-- criar outro frontend React aqui adicionaria uma segunda aplicacao web concorrente dentro do mesmo repositorio;
-- isso aumentaria o risco de o avaliador confundir o que e **produto da Kata 2** com o que e apenas **infraestrutura de apresentacao**;
-- para o papel do showcase, HTML + CSS + JavaScript modular ja resolvem o necessario:
-  - navegar pelas paginas;
-  - abrir markdown;
-  - disparar apenas comandos whitelist;
-  - acompanhar retorno real da API local;
-  - sustentar o benchmark visual da Kata 1;
-- sem React, o showcase continua mais leve para subir e entender, sem exigir outro ciclo de build, outro `npm install` e outra arvore de dependencias so para uma camada auxiliar.
-
-Trade-off assumido:
-
-- React daria melhor ergonomia de componentizacao, testes de UI e composicao de estado;
-- por outro lado, aqui isso aumentaria a complexidade operacional de uma camada
-  que nao e o foco principal da avaliacao.
-
-Em resumo: o `showcase/` foi mantido como **vitrine tecnica do repositorio**,
-enquanto o frontend em React ficou concentrado onde o enunciado realmente pede
-um produto web para ser avaliado: a **Kata 2**.
+- `showcase/` organiza a revisao;
+- `kata-2/frontend` continua sendo a interface do produto;
+- `scripts/kata.sh` e `scripts\kata.cmd` continuam sendo os pontos oficiais de execucao.
