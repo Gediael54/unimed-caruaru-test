@@ -170,7 +170,7 @@ goto :done
 :kata2_frontend_install
 call :require_cmd npm || goto :fail
 echo ^>^> Kata 2 - instalar dependencias do frontend
-npm --prefix "%KATA2_WEB_DIR%" install || goto :fail
+npm --prefix "%KATA2_WEB_DIR%" ci || goto :fail
 goto :done
 
 :kata2_frontend_lint
@@ -203,12 +203,12 @@ goto :done
 :kata2_all
 call :require_cmd dotnet || goto :fail
 call :require_cmd npm    || goto :fail
-call :require_frontend_install || goto :fail
 echo ^>^> Kata 2 - suite .NET + frontend (build, testes e lint)
 dotnet restore "%KATA2_TESTS_PROJECT%"                          || goto :fail
 dotnet build   "%KATA2_API_PROJECT%" --no-restore               || goto :fail
 dotnet test    "%KATA2_TESTS_PROJECT%" --filter "Scope=Backend" --no-restore || goto :fail
 dotnet test    "%KATA2_TESTS_PROJECT%" --filter "Scope=Api"     --no-restore || goto :fail
+npm --prefix   "%KATA2_WEB_DIR%" ci                             || goto :fail
 npm --prefix   "%KATA2_WEB_DIR%" run lint                       || goto :fail
 npm --prefix   "%KATA2_WEB_DIR%" run test                       || goto :fail
 npm --prefix   "%KATA2_WEB_DIR%" run build                      || goto :fail
@@ -276,13 +276,13 @@ goto :show_help
 call :resolve_python || goto :fail
 call :require_cmd dotnet || goto :fail
 call :require_cmd npm    || goto :fail
-call :require_frontend_install || goto :fail
 echo ^>^> Repositorio - validacao completa (Kata 1 + Kata 2 + Kata 4)
 call :python_exec kata-1\verify.py                              || goto :fail
 dotnet restore "%KATA2_TESTS_PROJECT%"                          || goto :fail
 dotnet build   "%KATA2_API_PROJECT%" --no-restore               || goto :fail
 dotnet test    "%KATA2_TESTS_PROJECT%" --filter "Scope=Backend" --no-restore || goto :fail
 dotnet test    "%KATA2_TESTS_PROJECT%" --filter "Scope=Api"     --no-restore || goto :fail
+npm --prefix   "%KATA2_WEB_DIR%" ci                             || goto :fail
 npm --prefix   "%KATA2_WEB_DIR%" run lint                       || goto :fail
 npm --prefix   "%KATA2_WEB_DIR%" run test                       || goto :fail
 npm --prefix   "%KATA2_WEB_DIR%" run build                      || goto :fail
@@ -298,19 +298,20 @@ set "PYTHON_BIN="
 set "PYTHON_ARGS="
 where py >nul 2>nul
 if not errorlevel 1 (
-  py -3 -c "import sys" >nul 2>nul
+  py -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>nul
   if not errorlevel 1 (
     set "PYTHON_BIN=py"
     set "PYTHON_ARGS=-3"
     exit /b 0
   )
-  set "PYTHON_BIN=py"
-  exit /b 0
 )
 where python >nul 2>nul
 if not errorlevel 1 (
-  set "PYTHON_BIN=python"
-  exit /b 0
+  python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>nul
+  if not errorlevel 1 (
+    set "PYTHON_BIN=python"
+    exit /b 0
+  )
 )
 call :find_python_outside_path "%LocalAppData%\Programs\Python"
 if not errorlevel 1 (
@@ -322,7 +323,7 @@ if not errorlevel 1 (
   call :print_python_path_warning
   exit /b 0
 )
-echo [ERRO] Python 3 nao encontrado no PATH.
+echo [ERRO] Python 3.11+ nao encontrado no PATH.
 echo [ERRO] Instale Python 3.11+.
 echo [ERRO] Windows: winget install -e --id Python.Python.3.12 --scope machine
 echo [ERRO] Se voce acabou de instalar, feche este terminal e abra outro.
@@ -365,7 +366,7 @@ exit /b 0
 :require_frontend_install
 if exist "%KATA2_WEB_DIR%\node_modules" exit /b 0
 echo [ERRO] Dependencias do frontend da Kata 2 ainda nao foram instaladas.
-echo [ERRO] Rode: npm --prefix "%KATA2_WEB_DIR%" install
+echo [ERRO] Rode: npm --prefix "%KATA2_WEB_DIR%" ci
 echo [ERRO] Ou: scripts\kata.cmd kata2 frontend-install
 exit /b 1
 
@@ -382,7 +383,7 @@ if /I "%~1"=="dotnet" (
   exit /b 0
 )
 if /I "%~1"=="npm" (
-  echo [ERRO] Instale Node.js 22 LTS ou 20.19+; o npm vem junto.
+  echo [ERRO] Instale Node.js 24.14.0 ou Node.js 22.13+; o npm vem junto.
   echo [ERRO] Depois confirme com: node --version
   echo [ERRO] E com: npm --version
   exit /b 0
