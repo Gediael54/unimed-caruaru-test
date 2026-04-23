@@ -21,7 +21,7 @@ export function TaskViewSwitcher({
   } as const;
 
   return (
-    <div className="toolbar toolbar--views" role="group" aria-label="Modos de visualização">
+    <div className="view-switcher" role="group" aria-label="Modos de visualização">
       {taskViewModes.map((item) => {
         const Icon = icons[item.value];
 
@@ -35,13 +35,8 @@ export function TaskViewSwitcher({
             onClick={() => onChange(item.value)}
             type="button"
           >
-            <span className="toolbar-button-icon" aria-hidden="true">
-              <Icon size={16} />
-            </span>
-            <span className="toolbar-button-copy">
-              <span>{item.label}</span>
-              <small>{item.caption}</small>
-            </span>
+            <Icon size={14} aria-hidden="true" />
+            <span>{item.label}</span>
           </button>
         );
       })}
