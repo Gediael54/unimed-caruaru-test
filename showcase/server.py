@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -59,66 +60,87 @@ DOC_SPECS = [
 DOCS_BY_ID = {spec["id"]: spec for spec in DOC_SPECS}
 
 
+WINDOWS_HOST = os.name == "nt"
+
+
+def runner_command(*parts: str) -> str:
+    joined = " ".join(parts)
+    if WINDOWS_HOST:
+        return f"scripts\\kata.cmd {joined}".strip()
+    return f"bash scripts/kata.sh {joined}".strip()
+
+
+def runner_argv(*parts: str) -> list[str]:
+    if WINDOWS_HOST:
+        return ["cmd", "/c", "scripts\\kata.cmd", *parts]
+    return ["bash", "scripts/kata.sh", *parts]
+
+
+def python_command(*parts: str) -> str:
+    interpreter = "python" if WINDOWS_HOST else "python3"
+    return " ".join([interpreter, *parts])
+
+
 COMMAND_SPECS = [
     {
         "id": "repo-help",
         "scope": "repo",
         "title": "Runner · Ajuda completa",
         "description": "Mostra todos os comandos do runner e destaca o que atende ao enunciado.",
-        "runner_command": "bash scripts/kata.sh help",
-        "manual_command": "bash scripts/kata.sh help",
+        "runner_command": runner_command("help"),
+        "manual_command": runner_command("help"),
         "runnable": True,
         "recommended": True,
         "artifacts": [],
         "timeout_s": 60,
-        "argv": ["bash", "scripts/kata.sh", "help"],
+        "argv": runner_argv("help"),
     },
     {
         "id": "kata1-demo",
         "scope": "kata-1",
         "title": "Kata 1 · Demo executável",
         "description": "Executa a demonstração principal do algoritmo de triagem.",
-        "runner_command": "bash scripts/kata.sh kata1 demo",
-        "manual_command": "python3 kata-1/verify.py --mode demo",
+        "runner_command": runner_command("kata1", "demo"),
+        "manual_command": python_command("kata-1/verify.py", "--mode", "demo"),
         "runnable": True,
         "recommended": True,
         "artifacts": [],
         "timeout_s": 90,
-        "argv": ["bash", "scripts/kata.sh", "kata1", "demo"],
+        "argv": runner_argv("kata1", "demo"),
     },
     {
         "id": "kata1-tests",
         "scope": "kata-1",
         "title": "Kata 1 · Testes",
         "description": "Roda a suíte unitária da fila de triagem.",
-        "runner_command": "bash scripts/kata.sh kata1 tests",
-        "manual_command": "python3 -m unittest discover -s kata-1 -p 'test_*.py'",
+        "runner_command": runner_command("kata1", "tests"),
+        "manual_command": python_command("-m", "unittest", "discover", "-s", "kata-1", "-p", "test_*.py"),
         "runnable": True,
         "recommended": False,
         "artifacts": [],
         "timeout_s": 120,
-        "argv": ["bash", "scripts/kata.sh", "kata1", "tests"],
+        "argv": runner_argv("kata1", "tests"),
     },
     {
         "id": "kata1-verify",
         "scope": "kata-1",
         "title": "Kata 1 · Validação completa",
         "description": "Roda a validação resumida da kata com os extras de revisão.",
-        "runner_command": "bash scripts/kata.sh kata1 verify",
-        "manual_command": "python3 kata-1/verify.py",
+        "runner_command": runner_command("kata1", "verify"),
+        "manual_command": python_command("kata-1/verify.py"),
         "runnable": True,
         "recommended": False,
         "artifacts": [],
         "timeout_s": 180,
-        "argv": ["bash", "scripts/kata.sh", "kata1", "verify"],
+        "argv": runner_argv("kata1", "verify"),
     },
     {
         "id": "kata1-explore",
         "scope": "kata-1",
         "title": "Kata 1 · Explorer em bash",
         "description": "Modo interativo no terminal para explorar casos e volumes manualmente.",
-        "runner_command": "bash scripts/kata.sh kata1 explore",
-        "manual_command": "python3 kata-1/explore.py",
+        "runner_command": runner_command("kata1", "explore"),
+        "manual_command": python_command("kata-1/explore.py"),
         "runnable": False,
         "recommended": False,
         "artifacts": [],
@@ -128,7 +150,7 @@ COMMAND_SPECS = [
         "scope": "kata-2",
         "title": "Kata 2 · Backend + frontend",
         "description": "Fluxo integrado para subir o produto da kata em modo desenvolvimento.",
-        "runner_command": "bash scripts/kata.sh kata2 dev",
+        "runner_command": runner_command("kata2", "dev"),
         "manual_command": (
             "Terminal 1:\n"
             "dotnet run --project kata-2/backend/TaskBoard.Api.csproj --urls http://localhost:5000\n\n"
@@ -144,14 +166,14 @@ COMMAND_SPECS = [
             {"label": "Abrir OpenAPI", "url": "http://localhost:5000/openapi/v1.json"},
         ],
         "timeout_s": 1800,
-        "argv": ["bash", "scripts/kata.sh", "kata2", "dev"],
+        "argv": runner_argv("kata2", "dev"),
     },
     {
         "id": "kata2-all",
         "scope": "kata-2",
         "title": "Kata 2 · Suíte offline",
         "description": "Executa restore, build, testes e validações do frontend/backend.",
-        "runner_command": "bash scripts/kata.sh kata2 all",
+        "runner_command": runner_command("kata2", "all"),
         "manual_command": (
             "dotnet restore kata-2/backend.tests/TaskBoard.Api.Tests.csproj\n"
             "dotnet build kata-2/backend/TaskBoard.Api.csproj --no-restore\n"
@@ -168,80 +190,80 @@ COMMAND_SPECS = [
             "kata-2/artifacts/frontend/coverage",
         ],
         "timeout_s": 900,
-        "argv": ["bash", "scripts/kata.sh", "kata2", "all"],
+        "argv": runner_argv("kata2", "all"),
     },
     {
         "id": "kata2-backend-tests",
         "scope": "kata-2",
         "title": "Kata 2 · Testes do backend",
         "description": "Roda os testes de regra do backend .NET.",
-        "runner_command": "bash scripts/kata.sh kata2 backend-tests",
+        "runner_command": runner_command("kata2", "backend-tests"),
         "manual_command": "dotnet run --project kata-2/backend.tests/TaskBoard.Api.Tests.csproj --no-restore -- backend",
         "runnable": True,
         "recommended": False,
         "artifacts": [],
         "timeout_s": 300,
-        "argv": ["bash", "scripts/kata.sh", "kata2", "backend-tests"],
+        "argv": runner_argv("kata2", "backend-tests"),
     },
     {
         "id": "kata2-api-tests",
         "scope": "kata-2",
         "title": "Kata 2 · Testes de contrato HTTP",
         "description": "Valida o contrato exposto pela API .NET.",
-        "runner_command": "bash scripts/kata.sh kata2 api-tests",
+        "runner_command": runner_command("kata2", "api-tests"),
         "manual_command": "dotnet run --project kata-2/backend.tests/TaskBoard.Api.Tests.csproj --no-restore -- api",
         "runnable": True,
         "recommended": False,
         "artifacts": [],
         "timeout_s": 300,
-        "argv": ["bash", "scripts/kata.sh", "kata2", "api-tests"],
+        "argv": runner_argv("kata2", "api-tests"),
     },
     {
         "id": "kata2-frontend-lint",
         "scope": "kata-2",
         "title": "Kata 2 · Lint do frontend",
         "description": "Executa ESLint na aplicação React + TypeScript.",
-        "runner_command": "bash scripts/kata.sh kata2 frontend-lint",
+        "runner_command": runner_command("kata2", "frontend-lint"),
         "manual_command": "npm --prefix kata-2/frontend run lint",
         "runnable": True,
         "recommended": False,
         "artifacts": [],
         "timeout_s": 180,
-        "argv": ["bash", "scripts/kata.sh", "kata2", "frontend-lint"],
+        "argv": runner_argv("kata2", "frontend-lint"),
     },
     {
         "id": "kata2-frontend-tests",
         "scope": "kata-2",
         "title": "Kata 2 · Testes do frontend",
         "description": "Roda Vitest na aplicação da Kata 2.",
-        "runner_command": "bash scripts/kata.sh kata2 frontend-tests",
+        "runner_command": runner_command("kata2", "frontend-tests"),
         "manual_command": "npm --prefix kata-2/frontend run test",
         "runnable": True,
         "recommended": False,
         "artifacts": ["kata-2/artifacts/frontend/coverage"],
         "timeout_s": 300,
-        "argv": ["bash", "scripts/kata.sh", "kata2", "frontend-tests"],
+        "argv": runner_argv("kata2", "frontend-tests"),
     },
     {
         "id": "kata2-frontend-build",
         "scope": "kata-2",
         "title": "Kata 2 · Build do frontend",
         "description": "Gera o build da UI em Vite e TypeScript.",
-        "runner_command": "bash scripts/kata.sh kata2 frontend-build",
+        "runner_command": runner_command("kata2", "frontend-build"),
         "manual_command": "npm --prefix kata-2/frontend run build",
         "runnable": True,
         "recommended": False,
         "artifacts": ["kata-2/artifacts/frontend/dist"],
         "timeout_s": 300,
-        "argv": ["bash", "scripts/kata.sh", "kata2", "frontend-build"],
+        "argv": runner_argv("kata2", "frontend-build"),
     },
     {
         "id": "kata4-pipeline",
         "scope": "kata-4",
         "title": "Kata 4 · Pipeline",
         "description": "Executa o pipeline e gera o consolidado com indicadores.",
-        "runner_command": "bash scripts/kata.sh kata4 pipeline",
-        "manual_command": "python3 kata-4/pipeline.py",
+        "runner_command": runner_command("kata4", "pipeline"),
+        "manual_command": python_command("kata-4/pipeline.py"),
         "runnable": True,
         "recommended": True,
         "artifacts": [
@@ -249,41 +271,41 @@ COMMAND_SPECS = [
             "kata-4/output/indicators.json",
         ],
         "timeout_s": 180,
-        "argv": ["bash", "scripts/kata.sh", "kata4", "pipeline"],
+        "argv": runner_argv("kata4", "pipeline"),
     },
     {
         "id": "kata4-tests",
         "scope": "kata-4",
         "title": "Kata 4 · Testes",
         "description": "Executa a suíte unitária do pipeline.",
-        "runner_command": "bash scripts/kata.sh kata4 tests",
-        "manual_command": "python3 -m unittest discover -s kata-4 -p 'test_*.py'",
+        "runner_command": runner_command("kata4", "tests"),
+        "manual_command": python_command("-m", "unittest", "discover", "-s", "kata-4", "-p", "test_*.py"),
         "runnable": True,
         "recommended": False,
         "artifacts": [],
         "timeout_s": 180,
-        "argv": ["bash", "scripts/kata.sh", "kata4", "tests"],
+        "argv": runner_argv("kata4", "tests"),
     },
     {
         "id": "showcase-tests",
         "scope": "showcase",
         "title": "Showcase · Testes",
         "description": "Valida a API local e a lógica da camada visual do repositório.",
-        "runner_command": "bash scripts/kata.sh showcase tests",
-        "manual_command": "python3 -m unittest discover -s showcase -p 'test_*.py'",
+        "runner_command": runner_command("showcase", "tests"),
+        "manual_command": python_command("-m", "unittest", "discover", "-s", "showcase", "-p", "test_*.py"),
         "runnable": True,
         "recommended": False,
         "artifacts": [],
         "timeout_s": 180,
-        "argv": ["bash", "scripts/kata.sh", "showcase", "tests"],
+        "argv": runner_argv("showcase", "tests"),
     },
     {
         "id": "all-validate",
         "scope": "repo",
         "title": "Repositório · Validação completa",
         "description": "Executa o fluxo offline principal das Katas 1, 2 e 4.",
-        "runner_command": "bash scripts/kata.sh all validate",
-        "manual_command": "bash scripts/kata.sh all validate",
+        "runner_command": runner_command("all", "validate"),
+        "manual_command": runner_command("all", "validate"),
         "runnable": True,
         "recommended": True,
         "artifacts": [
@@ -291,7 +313,7 @@ COMMAND_SPECS = [
             "kata-4/output",
         ],
         "timeout_s": 1_200,
-        "argv": ["bash", "scripts/kata.sh", "all", "validate"],
+        "argv": runner_argv("all", "validate"),
     },
 ]
 COMMANDS_BY_ID = {spec["id"]: spec for spec in COMMAND_SPECS}
