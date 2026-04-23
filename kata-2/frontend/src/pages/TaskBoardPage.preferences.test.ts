@@ -3,7 +3,7 @@ import {
   STORAGE_KEY,
   readBoardPreferences,
   writeBoardPreferences
-} from "./TaskBoardPage";
+} from "./TaskBoardPage.preferences";
 
 describe("TaskBoardPage preferences helpers", () => {
   afterEach(() => {
