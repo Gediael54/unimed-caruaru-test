@@ -26,7 +26,7 @@ As discussoes mais densas ficam fora daqui:
 
 ## O Que Esta Kata Entrega
 
-A Kata 2 foi tratada como um board interno em formato de robust MVP:
+A Kata 2 foi tratada como um board interno de escopo controlado:
 
 - um unico workspace;
 - sem autenticacao real;
@@ -36,14 +36,14 @@ A Kata 2 foi tratada como um board interno em formato de robust MVP:
 - frontend com multiplas leituras visuais do mesmo estado;
 - backend HTTP com contrato claro e testes.
 
-O objetivo aqui e provar produto, contrato e evolucao arquitetural sem encenar colaboracao que o sistema ainda nao sustenta.
+O objetivo aqui e provar produto, contrato e evolucao arquitetural mantendo colaboracao autenticada fora do escopo atual.
 
 ## O Que Precisa Baixar
 
 Para rodar a Kata 2:
 
 - `.NET SDK 10`
-- `Node.js 22 LTS` ou `Node.js 20.19+`
+- `Node.js 24.14.0` para ficar igual ao CI, ou `Node.js 22.13+`
 - `npm`
 - `curl`
   - necessario apenas para o fluxo unificado em `bash` (`kata2 dev`);
@@ -55,13 +55,13 @@ Na raiz do repositorio:
 
 ```bash
 dotnet restore kata-2/backend.tests/TaskBoard.Api.Tests.csproj
-npm --prefix kata-2/frontend install
+npm --prefix kata-2/frontend ci
 ```
 
 Esses dois comandos resolvem o setup local da kata:
 
 - o primeiro baixa os pacotes .NET do backend e dos testes;
-- o segundo baixa as dependencias do frontend React/TypeScript.
+- o segundo baixa as dependencias do frontend React/TypeScript exatamente como no `package-lock.json`, igual ao CI.
 
 Antes de subir ou validar a kata, confirme:
 
@@ -183,7 +183,7 @@ dotnet restore kata-2/backend.tests/TaskBoard.Api.Tests.csproj
 dotnet build kata-2/backend/TaskBoard.Api.csproj --no-restore
 dotnet test kata-2/backend.tests/TaskBoard.Api.Tests.csproj --filter Scope=Backend
 dotnet test kata-2/backend.tests/TaskBoard.Api.Tests.csproj --filter Scope=Api
-npm --prefix kata-2/frontend install
+npm --prefix kata-2/frontend ci
 npm --prefix kata-2/frontend run lint
 npm --prefix kata-2/frontend run test
 npm --prefix kata-2/frontend run build
