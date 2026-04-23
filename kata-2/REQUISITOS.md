@@ -32,6 +32,9 @@ nao sustenta de verdade.
   limite de tamanho definido pela implementacao.
 - **Justificativa**: board profissional precisa contexto adicional, mas obrigar
   descricao em todo card piora captura rapida.
+  No frontend, a descricao tambem suporta marcadores estruturados como
+  `Responsável`, `Prazo`, `Labels` e `Checklist` para enriquecer a leitura do
+  board sem expandir o contrato HTTP neste MVP.
 
 ### 2.3 `priority`
 
