@@ -5,12 +5,16 @@ on:
     paths:
       - ".github/workflows/kata-1.yml"
       - "kata-1/**"
-      - "scripts/kata.sh"
+      - "scripts/**"
+      - ".editorconfig"
+      - ".gitattributes"
   pull_request:
     paths:
       - ".github/workflows/kata-1.yml"
       - "kata-1/**"
-      - "scripts/kata.sh"
+      - "scripts/**"
+      - ".editorconfig"
+      - ".gitattributes"
 
 permissions:
   contents: read
