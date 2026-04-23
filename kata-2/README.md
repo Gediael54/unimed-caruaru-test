@@ -50,6 +50,8 @@ board profissional. O robust MVP passa a exigir:
 - prioridade para triagem real;
 - ciclo de status mais completo;
 - arquivamento em vez de exclusao destrutiva;
+- leitura visual mais rica no frontend, com prazo sinalizado, checklist com
+  progresso e metadados extraidos do texto estruturado do card;
 - documentacao honesta sobre o que ainda nao entrou.
 
 Isso entrega evolucao seria de produto sem inflar a kata com subsistemas
