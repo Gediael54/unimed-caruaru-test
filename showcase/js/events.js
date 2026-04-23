@@ -40,6 +40,16 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const retryDocTarget = event.target.closest("[data-retry-doc]");
+  if (retryDocTarget) {
+    void openDoc(
+      retryDocTarget.getAttribute("data-retry-doc"),
+      retryDocTarget.getAttribute("data-retry-doc-route") || "docs",
+      { force: true },
+    );
+    return;
+  }
+
   const caseTarget = event.target.closest("[data-case-id]");
   if (caseTarget) {
     selectedCaseId = caseTarget.getAttribute("data-case-id");
