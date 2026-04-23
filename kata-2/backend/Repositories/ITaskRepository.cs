@@ -12,5 +12,7 @@ public interface ITaskRepository
 
     BoardTask? Update(BoardTask task);
 
+    BoardTask? Update(Guid id, Func<BoardTask, BoardTask> update);
+
     bool Delete(Guid id);
 }
