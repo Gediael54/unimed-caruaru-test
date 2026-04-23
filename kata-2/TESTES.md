@@ -1,7 +1,6 @@
 # Kata 2 - Estrategia de Testes
 
-Este arquivo descreve a cobertura esperada para a Kata 2 no recorte de
-**robust MVP**.
+Este arquivo descreve a cobertura esperada para a Kata 2 no recorte atual.
 
 ## 1. Objetivo dos testes
 
@@ -29,6 +28,7 @@ Os testes unitarios do service/repositorio devem cobrir pelo menos:
 - atualizacao parcial de `title`, `description`, `priority` e `status`;
 - `DELETE` convertendo o card para arquivado em vez de apagamento definitivo;
 - exclusao de cards arquivados da listagem padrao;
+- restauracao operacional de card arquivado para `pending`;
 - resposta correta para IDs inexistentes;
 - consistencia sob concorrencia local no repositório do workspace.
 
@@ -77,5 +77,5 @@ passar a validar ficcao de produto, nao comportamento real.
 - meio: testes de contrato HTTP;
 - topo leve: testes de UI do fluxo principal.
 
-Esse equilibrio e suficiente para o robust MVP porque o maior risco esta em
-regra de board e contrato, nao em automacao E2E pesada.
+Esse equilibrio e suficiente para o escopo atual porque o maior risco esta em
+regra de board, concorrencia local e contrato, nao em automacao E2E pesada.
