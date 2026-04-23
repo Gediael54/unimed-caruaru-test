@@ -19,14 +19,10 @@ import {
 } from "../features/tasks/model/task.selectors";
 import { useTaskBoardPage } from "../features/tasks/hooks/useTaskBoardPage";
 import type { TaskSortMode, TaskViewMode } from "../features/tasks/model/task.types";
-
-type BoardPreferences = {
-  searchQuery: string;
-  sortMode: TaskSortMode;
-  viewMode: TaskViewMode;
-};
-
-export const STORAGE_KEY = "taskboard.preferences.v1";
+import {
+  readBoardPreferences,
+  writeBoardPreferences
+} from "./TaskBoardPage.preferences";
 
 const viewLabels: Record<TaskViewMode, string> = {
   list: "Lista",
@@ -46,36 +42,6 @@ const viewFilterHints: Record<TaskViewMode, string> = {
   timeline: "O recorte continua valendo, mas a leitura passa a privilegiar atividade recente.",
   focus: "Mantém o recorte operacional e remove o histórico arquivado da visão principal."
 };
-
-export function readBoardPreferences(): BoardPreferences {
-  if (typeof window === "undefined") {
-    return { searchQuery: "", sortMode: "priority", viewMode: "kanban" };
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(STORAGE_KEY);
-    if (!rawValue) {
-      return { searchQuery: "", sortMode: "priority", viewMode: "kanban" };
-    }
-
-    const parsed = JSON.parse(rawValue) as Partial<BoardPreferences>;
-    return {
-      searchQuery: parsed.searchQuery ?? "",
-      sortMode: parsed.sortMode ?? "priority",
-      viewMode: parsed.viewMode ?? "kanban"
-    };
-  } catch {
-    return { searchQuery: "", sortMode: "priority", viewMode: "kanban" };
-  }
-}
-
-export function writeBoardPreferences(preferences: BoardPreferences) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-}
 
 export function TaskBoardPage() {
   const initialPreferences = useMemo(() => readBoardPreferences(), []);
