@@ -5,12 +5,16 @@ on:
     paths:
       - ".github/workflows/kata-4.yml"
       - "kata-4/**"
-      - "scripts/kata.sh"
+      - "scripts/**"
+      - ".editorconfig"
+      - ".gitattributes"
   pull_request:
     paths:
       - ".github/workflows/kata-4.yml"
       - "kata-4/**"
-      - "scripts/kata.sh"
+      - "scripts/**"
+      - ".editorconfig"
+      - ".gitattributes"
 
 permissions:
   contents: read
@@ -19,6 +23,9 @@ jobs:
   validate-kata-4:
     name: Validate Kata 4
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
 
     steps:
       - name: Checkout repository
@@ -27,7 +34,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Run Kata 4 validation
         run: bash scripts/kata.sh kata4 all
