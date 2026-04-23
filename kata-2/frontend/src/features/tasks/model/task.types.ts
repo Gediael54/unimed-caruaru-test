@@ -8,6 +8,7 @@ export type TaskStatus =
 export type ActiveTaskStatus = Exclude<TaskStatus, "archived">;
 export type TaskFilter = TaskStatus | "all";
 export type TaskViewMode = "list" | "kanban" | "timeline" | "focus";
+export type TaskSortMode = "priority" | "recent" | "created" | "title";
 
 export type Task = {
   id: string;
