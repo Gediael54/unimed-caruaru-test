@@ -9,6 +9,18 @@ import server
 
 
 class ShowcaseHelpersTests(unittest.TestCase):
+    def test_runner_helpers_default_to_bash_on_non_windows(self) -> None:
+        with patch.object(server, "WINDOWS_HOST", False):
+            self.assertEqual(server.runner_command("help"), "bash scripts/kata.sh help")
+            self.assertEqual(server.runner_argv("kata1", "tests"), ["bash", "scripts/kata.sh", "kata1", "tests"])
+            self.assertEqual(server.python_command("kata-1/verify.py"), "python3 kata-1/verify.py")
+
+    def test_runner_helpers_switch_to_cmd_on_windows(self) -> None:
+        with patch.object(server, "WINDOWS_HOST", True):
+            self.assertEqual(server.runner_command("help"), r"scripts\kata.cmd help")
+            self.assertEqual(server.runner_argv("kata1", "tests"), ["cmd", "/c", r"scripts\kata.cmd", "kata1", "tests"])
+            self.assertEqual(server.python_command("kata-1/verify.py"), "python kata-1/verify.py")
+
     def test_public_command_spec_hides_internal_fields(self) -> None:
         spec = server.public_command_spec(server.COMMAND_SPECS[0])
 
@@ -240,8 +252,8 @@ class CommandRunsTests(unittest.TestCase):
             "command_id": "repo-help",
             "scope": "repo",
             "title": "Runner · Ajuda completa",
-            "runner_command": "bash scripts/kata.sh help",
-            "manual_command": "bash scripts/kata.sh help",
+            "runner_command": server.runner_command("help"),
+            "manual_command": server.runner_command("help"),
             "status": "queued",
             "stage_label": "Na fila do showcase",
             "created_at": "2026-04-22T12:00:00Z",
@@ -300,8 +312,8 @@ class CommandRunsTests(unittest.TestCase):
             "command_id": "repo-help",
             "scope": "repo",
             "title": "Runner · Ajuda completa",
-            "runner_command": "bash scripts/kata.sh help",
-            "manual_command": "bash scripts/kata.sh help",
+            "runner_command": server.runner_command("help"),
+            "manual_command": server.runner_command("help"),
             "status": "queued",
             "stage_label": "Na fila do showcase",
             "created_at": "2026-04-22T12:00:00Z",
