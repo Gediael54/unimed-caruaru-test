@@ -23,11 +23,20 @@ const state = {
   docCache: {},
   docLoading: {},
   docRequests: {},
+  docErrors: {},
   activeRunId: "",
   activeRun: null,
+  accessProbes: {},
 };
 
+const FRONTEND_LINK_LABEL = "Abrir frontend";
+
+function isFrontendLink(link) {
+  return Boolean(link) && link.label === FRONTEND_LINK_LABEL;
+}
+
 let runPollHandle = 0;
+let accessProbeHandle = 0;
 let pendingRouteDirection = 1;
 let pendingDocDirection = 1;
 let selectedCaseId = explorerCases[0].id;
@@ -307,11 +316,46 @@ function stopRunPolling() {
 function scheduleRunPolling() {
   stopRunPolling();
   if (!state.activeRunId || !state.activeRun || isFinalRunStatus(state.activeRun.status)) {
+    stopAccessProbing();
     return;
   }
   runPollHandle = window.setTimeout(() => {
     void refreshActiveRun();
   }, 900);
+  scheduleAccessProbing();
+}
+
+function stopAccessProbing() {
+  window.clearTimeout(accessProbeHandle);
+  accessProbeHandle = 0;
+}
+
+async function probeAccessLink(url) {
+  try {
+    await fetch(url, { mode: "no-cors", cache: "no-store" });
+    state.accessProbes[url] = { ready: true, lastCheck: Date.now() };
+  } catch {
+    state.accessProbes[url] = { ready: false, lastCheck: Date.now() };
+  }
+}
+
+function scheduleAccessProbing() {
+  stopAccessProbing();
+  const links = state.activeRun?.access_links ?? [];
+  if (!Array.isArray(links) || links.length === 0) return;
+  if (!isLiveRunStatus(state.activeRun?.status)) return;
+
+  const targets = links.filter(isFrontendLink);
+  if (targets.length === 0) return;
+
+  const runUrls = targets.map((link) => link.url);
+  Promise.all(runUrls.map(probeAccessLink))
+    .then(() => {
+      refreshExecutionRegion({ focus: false, pulse: false });
+      if (isLiveRunStatus(state.activeRun?.status)) {
+        accessProbeHandle = window.setTimeout(scheduleAccessProbing, 1500);
+      }
+    });
 }
 
 async function loadHealth() {
@@ -364,12 +408,17 @@ async function loadDocs() {
   }
 }
 
-async function ensureDocContent(docId) {
+async function ensureDocContent(docId, options = {}) {
   if (!docId) return null;
+  if (options.force) {
+    delete state.docCache[docId];
+    delete state.docErrors[docId];
+  }
   if (state.docCache[docId]) return state.docCache[docId];
   if (state.docRequests[docId]) return state.docRequests[docId];
 
   state.docLoading[docId] = true;
+  delete state.docErrors[docId];
 
   const request = (async () => {
     try {
@@ -379,16 +428,11 @@ async function ensureDocContent(docId) {
       state.docCache[docId] = payload;
       return payload;
     } catch {
-      state.docCache[docId] = {
-        id: docId,
-        title: "Documento indisponível",
-        path: "—",
-        scope: "repo",
-        content: "Não foi possível carregar este documento pelo showcase.",
-        updated_at: "",
-        error: true,
+      state.docErrors[docId] = {
+        message: "Não foi possível carregar este documento pelo showcase.",
+        hint: "Garanta que o servidor local do showcase esteja ativo (bash scripts/kata.sh showcase serve) e tente de novo.",
       };
-      return state.docCache[docId];
+      return null;
     } finally {
       delete state.docLoading[docId];
       delete state.docRequests[docId];
@@ -401,7 +445,7 @@ async function ensureDocContent(docId) {
   return request;
 }
 
-async function openDoc(docId, route = "docs") {
+async function openDoc(docId, route = "docs", options = {}) {
   if (!docId) return;
   const currentIndex = getDocOrder(state.activeDocId);
   const nextIndex = getDocOrder(docId);
@@ -417,7 +461,7 @@ async function openDoc(docId, route = "docs") {
   } else {
     renderApp({ animatePage: false, animateDoc: false });
   }
-  await ensureDocContent(docId);
+  await ensureDocContent(docId, { force: Boolean(options.force) });
   window.requestAnimationFrame(() => {
     focusDocViewer();
   });
@@ -445,6 +489,8 @@ async function startCommandRun(commandId) {
   if (!command || !command.runnable) return;
 
   stopRunPolling();
+  stopAccessProbing();
+  state.accessProbes = {};
   state.activeRunId = "";
   state.activeRun = buildPreparingRun(command);
   setRoute("execucao", { scroll: false });
