@@ -60,37 +60,37 @@ goto :show_help
 :kata1_tests
 call :resolve_python || goto :fail
 echo ^>^> Kata 1 - testes unitarios
-"%PYTHON_BIN%" -m unittest discover -s kata-1 -p "test_*.py"
+call :python_exec -m unittest discover -s kata-1 -p "test_*.py" || goto :fail
 goto :done
 
 :kata1_demo
 call :resolve_python || goto :fail
 echo ^>^> Kata 1 - demonstracao do algoritmo
-"%PYTHON_BIN%" kata-1\verify.py --mode demo
+call :python_exec kata-1\verify.py --mode demo || goto :fail
 goto :done
 
 :kata1_verify
 call :resolve_python || goto :fail
 echo ^>^> Kata 1 - validacao completa resumida
-"%PYTHON_BIN%" kata-1\verify.py
+call :python_exec kata-1\verify.py || goto :fail
 goto :done
 
 :kata1_verify_verbose
 call :resolve_python || goto :fail
 echo ^>^> Kata 1 - validacao completa detalhada
-"%PYTHON_BIN%" kata-1\verify.py --mode full-verbose
+call :python_exec kata-1\verify.py --mode full-verbose || goto :fail
 goto :done
 
 :kata1_benchmark
 call :resolve_python || goto :fail
 echo ^>^> Kata 1 - benchmark ilustrativo
-"%PYTHON_BIN%" kata-1\verify.py --mode benchmark
+call :python_exec kata-1\verify.py --mode benchmark || goto :fail
 goto :done
 
 :kata1_explore
 call :resolve_python || goto :fail
 echo ^>^> Kata 1 - explorer interativo
-"%PYTHON_BIN%" kata-1\explore.py
+call :python_exec kata-1\explore.py || goto :fail
 goto :done
 
 rem ---------------------------------------------------------------------------
@@ -116,6 +116,7 @@ goto :show_help
 :kata2_dev
 call :require_cmd dotnet || goto :fail
 call :require_cmd npm    || goto :fail
+call :require_frontend_install || goto :fail
 echo ^>^> Kata 2 - backend + frontend (abra duas janelas)
 echo.
 echo [!] No Windows nativo, o fluxo unificado com health check fica disponivel
@@ -129,72 +130,80 @@ goto :done
 :kata2_backend_dev
 call :require_cmd dotnet || goto :fail
 echo ^>^> Kata 2 - backend em modo desenvolvimento
-dotnet run --project "%KATA2_API_PROJECT%" --urls http://localhost:5000
+dotnet run --project "%KATA2_API_PROJECT%" --urls http://localhost:5000 || goto :fail
 goto :done
 
 :kata2_frontend_dev
 call :require_cmd npm || goto :fail
+call :require_frontend_install || goto :fail
 echo ^>^> Kata 2 - frontend em modo desenvolvimento
-npm --prefix "%KATA2_WEB_DIR%" run dev
+npm --prefix "%KATA2_WEB_DIR%" run dev || goto :fail
 goto :done
 
 :kata2_backend_restore
 call :require_cmd dotnet || goto :fail
 echo ^>^> Kata 2 - restore do backend e testes
-dotnet restore "%KATA2_TESTS_PROJECT%"
+dotnet restore "%KATA2_TESTS_PROJECT%" || goto :fail
 goto :done
 
 :kata2_backend_build
 call :require_cmd dotnet || goto :fail
+call :require_kata2_restore || goto :fail
 echo ^>^> Kata 2 - build do backend
-dotnet build "%KATA2_API_PROJECT%" --no-restore
+dotnet build "%KATA2_API_PROJECT%" --no-restore || goto :fail
 goto :done
 
 :kata2_backend_tests
 call :require_cmd dotnet || goto :fail
+call :require_kata2_restore || goto :fail
 echo ^>^> Kata 2 - testes unitarios do backend
-dotnet test "%KATA2_TESTS_PROJECT%" --filter "Scope=Backend" --no-restore
+dotnet test "%KATA2_TESTS_PROJECT%" --filter "Scope=Backend" --no-restore || goto :fail
 goto :done
 
 :kata2_api_tests
 call :require_cmd dotnet || goto :fail
+call :require_kata2_restore || goto :fail
 echo ^>^> Kata 2 - testes de contrato da API
-dotnet test "%KATA2_TESTS_PROJECT%" --filter "Scope=Api" --no-restore
+dotnet test "%KATA2_TESTS_PROJECT%" --filter "Scope=Api" --no-restore || goto :fail
 goto :done
 
 :kata2_frontend_install
 call :require_cmd npm || goto :fail
 echo ^>^> Kata 2 - instalar dependencias do frontend
-npm --prefix "%KATA2_WEB_DIR%" install
+npm --prefix "%KATA2_WEB_DIR%" install || goto :fail
 goto :done
 
 :kata2_frontend_lint
 call :require_cmd npm || goto :fail
+call :require_frontend_install || goto :fail
 echo ^>^> Kata 2 - lint do frontend
-npm --prefix "%KATA2_WEB_DIR%" run lint
+npm --prefix "%KATA2_WEB_DIR%" run lint || goto :fail
 goto :done
 
 :kata2_frontend_tests
 call :require_cmd npm || goto :fail
+call :require_frontend_install || goto :fail
 echo ^>^> Kata 2 - testes do frontend
-npm --prefix "%KATA2_WEB_DIR%" run test
+npm --prefix "%KATA2_WEB_DIR%" run test || goto :fail
 goto :done
 
 :kata2_frontend_build
 call :require_cmd npm || goto :fail
+call :require_frontend_install || goto :fail
 echo ^>^> Kata 2 - build de producao do frontend
-npm --prefix "%KATA2_WEB_DIR%" run build
+npm --prefix "%KATA2_WEB_DIR%" run build || goto :fail
 goto :done
 
 :kata2_frontend_audit
 call :require_cmd npm || goto :fail
 echo ^>^> Kata 2 - auditoria de dependencias do frontend
-npm --prefix "%KATA2_WEB_DIR%" audit --audit-level=high
+npm --prefix "%KATA2_WEB_DIR%" audit --audit-level=high || goto :fail
 goto :done
 
 :kata2_all
 call :require_cmd dotnet || goto :fail
 call :require_cmd npm    || goto :fail
+call :require_frontend_install || goto :fail
 echo ^>^> Kata 2 - suite .NET + frontend (build, testes e lint)
 dotnet restore "%KATA2_TESTS_PROJECT%"                          || goto :fail
 dotnet build   "%KATA2_API_PROJECT%" --no-restore               || goto :fail
@@ -218,20 +227,20 @@ goto :show_help
 :kata4_pipeline
 call :resolve_python || goto :fail
 echo ^>^> Kata 4 - pipeline
-"%PYTHON_BIN%" kata-4\pipeline.py
+call :python_exec kata-4\pipeline.py || goto :fail
 goto :done
 
 :kata4_tests
 call :resolve_python || goto :fail
 echo ^>^> Kata 4 - testes
-"%PYTHON_BIN%" -m unittest discover -s kata-4 -p "test_*.py"
+call :python_exec -m unittest discover -s kata-4 -p "test_*.py" || goto :fail
 goto :done
 
 :kata4_all
 call :resolve_python || goto :fail
 echo ^>^> Kata 4 - pipeline + testes
-"%PYTHON_BIN%" kata-4\pipeline.py                             || goto :fail
-"%PYTHON_BIN%" -m unittest discover -s kata-4 -p "test_*.py"  || goto :fail
+call :python_exec kata-4\pipeline.py                          || goto :fail
+call :python_exec -m unittest discover -s kata-4 -p "test_*.py" || goto :fail
 goto :done
 
 rem ---------------------------------------------------------------------------
@@ -246,13 +255,13 @@ goto :show_help
 :showcase_serve
 call :resolve_python || goto :fail
 echo ^>^> Showcase - portal visual em http://localhost:%SHOWCASE_PORT%
-"%PYTHON_BIN%" showcase\server.py --port %SHOWCASE_PORT%
+call :python_exec showcase\server.py --port %SHOWCASE_PORT% || goto :fail
 goto :done
 
 :showcase_tests
 call :resolve_python || goto :fail
 echo ^>^> Showcase - testes da API local
-"%PYTHON_BIN%" -m unittest discover -s showcase -p "test_*.py"
+call :python_exec -m unittest discover -s showcase -p "test_*.py" || goto :fail
 goto :done
 
 rem ---------------------------------------------------------------------------
@@ -267,8 +276,9 @@ goto :show_help
 call :resolve_python || goto :fail
 call :require_cmd dotnet || goto :fail
 call :require_cmd npm    || goto :fail
+call :require_frontend_install || goto :fail
 echo ^>^> Repositorio - validacao completa (Kata 1 + Kata 2 + Kata 4)
-"%PYTHON_BIN%" kata-1\verify.py                                 || goto :fail
+call :python_exec kata-1\verify.py                              || goto :fail
 dotnet restore "%KATA2_TESTS_PROJECT%"                          || goto :fail
 dotnet build   "%KATA2_API_PROJECT%" --no-restore               || goto :fail
 dotnet test    "%KATA2_TESTS_PROJECT%" --filter "Scope=Backend" --no-restore || goto :fail
@@ -276,16 +286,24 @@ dotnet test    "%KATA2_TESTS_PROJECT%" --filter "Scope=Api"     --no-restore || 
 npm --prefix   "%KATA2_WEB_DIR%" run lint                       || goto :fail
 npm --prefix   "%KATA2_WEB_DIR%" run test                       || goto :fail
 npm --prefix   "%KATA2_WEB_DIR%" run build                      || goto :fail
-"%PYTHON_BIN%" kata-4\pipeline.py                               || goto :fail
-"%PYTHON_BIN%" -m unittest discover -s kata-4 -p "test_*.py"    || goto :fail
+call :python_exec kata-4\pipeline.py                            || goto :fail
+call :python_exec -m unittest discover -s kata-4 -p "test_*.py" || goto :fail
 goto :done
 
 rem ---------------------------------------------------------------------------
 rem Helpers
 rem ---------------------------------------------------------------------------
 :resolve_python
+set "PYTHON_BIN="
+set "PYTHON_ARGS="
 where py >nul 2>nul
 if not errorlevel 1 (
+  py -3 -c "import sys" >nul 2>nul
+  if not errorlevel 1 (
+    set "PYTHON_BIN=py"
+    set "PYTHON_ARGS=-3"
+    exit /b 0
+  )
   set "PYTHON_BIN=py"
   exit /b 0
 )
@@ -294,14 +312,85 @@ if not errorlevel 1 (
   set "PYTHON_BIN=python"
   exit /b 0
 )
-echo [ERRO] Python 3 nao encontrado no PATH. Instale em https://www.python.org/.
+call :find_python_outside_path "%LocalAppData%\Programs\Python"
+if not errorlevel 1 (
+  call :print_python_path_warning
+  exit /b 0
+)
+call :find_python_outside_path "%ProgramFiles%"
+if not errorlevel 1 (
+  call :print_python_path_warning
+  exit /b 0
+)
+echo [ERRO] Python 3 nao encontrado no PATH.
+echo [ERRO] Instale Python 3.11+.
+echo [ERRO] Windows: winget install -e --id Python.Python.3.12 --scope machine
+echo [ERRO] Se voce acabou de instalar, feche este terminal e abra outro.
+echo [ERRO] Depois teste: py -3 --version
+echo [ERRO] Ou: python --version
+echo [ERRO] Se ainda falhar, confira o PATH do Windows com: where python
+echo [ERRO] Ou: where py
 exit /b 1
 
 :require_cmd
 where %~1 >nul 2>nul
 if errorlevel 1 (
   echo [ERRO] Comando "%~1" nao encontrado no PATH.
+  call :print_missing_cmd_guidance %~1
   exit /b 1
+)
+exit /b 0
+
+:python_exec
+"%PYTHON_BIN%" %PYTHON_ARGS% %*
+exit /b %errorlevel%
+
+:find_python_outside_path
+if "%~1"=="" exit /b 1
+if not exist "%~1" exit /b 1
+for /f "delims=" %%I in ('where /r "%~1" python.exe 2^>nul') do (
+  set "PYTHON_BIN=%%~fI"
+  set "PYTHON_ARGS="
+  exit /b 0
+)
+exit /b 1
+
+:print_python_path_warning
+echo [AVISO] Python encontrado fora do PATH: "%PYTHON_BIN%"
+echo [AVISO] O runner vai usar esse executavel diretamente.
+echo [AVISO] Para "python" ou "py" funcionarem no terminal, feche este CMD/PowerShell e abra outro.
+echo [AVISO] Se ainda falhar, confira o PATH do Windows.
+exit /b 0
+
+:require_frontend_install
+if exist "%KATA2_WEB_DIR%\node_modules" exit /b 0
+echo [ERRO] Dependencias do frontend da Kata 2 ainda nao foram instaladas.
+echo [ERRO] Rode: npm --prefix "%KATA2_WEB_DIR%" install
+echo [ERRO] Ou: scripts\kata.cmd kata2 frontend-install
+exit /b 1
+
+:require_kata2_restore
+if exist "kata-2\backend\obj\project.assets.json" if exist "kata-2\backend.tests\obj\project.assets.json" exit /b 0
+echo [ERRO] Pacotes .NET da Kata 2 ainda nao foram restaurados.
+echo [ERRO] Rode: dotnet restore "%KATA2_TESTS_PROJECT%"
+echo [ERRO] Ou: scripts\kata.cmd kata2 backend-restore
+exit /b 1
+
+:print_missing_cmd_guidance
+if /I "%~1"=="dotnet" (
+  echo [ERRO] Instale .NET SDK 10 e confirme com: dotnet --version
+  exit /b 0
+)
+if /I "%~1"=="npm" (
+  echo [ERRO] Instale Node.js 22 LTS ou 20.19+; o npm vem junto.
+  echo [ERRO] Depois confirme com: node --version
+  echo [ERRO] E com: npm --version
+  exit /b 0
+)
+if /I "%~1"=="curl" (
+  echo [ERRO] Instale curl para usar o fluxo unificado em bash.
+  echo [ERRO] No Windows nativo, use: scripts\kata.cmd kata2 dev
+  exit /b 0
 )
 exit /b 0
 
