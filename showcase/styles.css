@@ -169,9 +169,7 @@ pre {
 }
 
 .nav-shell {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
   gap: 16px;
   padding: 14px 18px;
   margin-bottom: 20px;
@@ -206,9 +204,23 @@ pre {
 }
 
 .nav-groups {
-  flex: 1;
   display: grid;
   gap: 14px;
+}
+
+.nav-actions {
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.nav-actions-label {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .nav-group {
