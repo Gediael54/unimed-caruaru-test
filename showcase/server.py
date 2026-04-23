@@ -934,6 +934,9 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
                     "ok": True,
                     "showcase": "ready",
                     "commands": len(COMMAND_SPECS),
+                    "runner_family": "cmd" if WINDOWS_HOST else "bash",
+                    "runner_help_command": runner_command("help"),
+                    "showcase_start_command": runner_command("showcase", "serve"),
                 },
             )
             return
