@@ -7,8 +7,8 @@
   },
   "delivered_without_expected_date": 0,
   "delivery_percentages": {
-    "delayed": 33.33,
-    "on_time": 66.67
+    "delayed": 50.0,
+    "on_time": 50.0
   },
   "orphan_delivery_count": 1,
   "orphan_delivery_ids": [
