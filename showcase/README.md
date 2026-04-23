@@ -57,6 +57,12 @@ Ou manualmente:
 python3 showcase/server.py
 ```
 
+No Git Bash do Windows, se `python3` nao existir no `PATH`, use:
+
+```bash
+python showcase/server.py
+```
+
 ### Windows Nativo
 
 ```text
