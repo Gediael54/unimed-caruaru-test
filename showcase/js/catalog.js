@@ -323,7 +323,7 @@ const KATA3_HIGHLIGHTS = [
   },
   {
     title: "Foco da entrega",
-    text: "Análise madura de risco, priorização e governança, sem fingir que o problema se resolve só com código.",
+    text: "Análise de risco, priorização e governança, deixando claro o que código resolve e o que exige processo.",
   },
 ];
 
