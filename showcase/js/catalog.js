@@ -207,14 +207,15 @@ const KATA_PAGES = {
     summary:
       "Implementação em Python com foco em regras de negócio, testes unitários, análise escrita e exploração visual do comportamento da fila.",
     files: [
-      "kata-1/triage.py",
+      "kata-1/src/triage_queue/domain.py",
       "kata-1/ANALISE.md",
-      "kata-1/test_triage.py",
+      "kata-1/tests/test_triage.py",
       "kata-1/schema.sql",
     ],
     notes: [
       "Fila ordenada por urgência ajustada e FIFO por horário dentro do mesmo nível final.",
       "Regras 4 e 5 tratadas explicitamente com casos de borda 59/60 e 17/18.",
+      "A raiz do kata mantém wrappers finos para preservar os comandos documentados, mas a implementação real está em src/ e a suíte em tests/.",
       "Playground visual do showcase mantido como apoio; o terminal continua sendo a validação formal.",
     ],
     docIds: ["kata1-analysis", "kata1-readme"],
@@ -290,13 +291,14 @@ const KATA_PAGES = {
     summary:
       "Pipeline determinístico em Python para normalizar CSVs, gerar consolidado por pedido e calcular indicadores da operação.",
     files: [
-      "kata-4/pipeline.py",
+      "kata-4/src/report_pipeline/app.py",
       "kata-4/ANALISE.md",
-      "kata-4/test_pipeline.py",
+      "kata-4/tests/test_pipeline.py",
       "kata-4/output/",
     ],
     notes: [
       "Tratamento explícito de datas mistas, valores monetários inconsistentes, nulos obrigatórios e registros órfãos.",
+      "A raiz da kata mantém pipeline.py apenas como wrapper compatível; a implementação real foi movida para src/report_pipeline/.",
       "As saídas ficam em kata-4/output para inspeção técnica e reprocessamento idempotente.",
       "A análise escrita cobre idempotência, escala e estratégia de testes.",
     ],
