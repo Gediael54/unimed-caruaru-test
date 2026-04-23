@@ -40,6 +40,9 @@ function renderCopyButton(label, value, variant = "secondary") {
 function renderNav() {
   const container = document.querySelector("#top-nav");
   if (!container) return;
+  const runnerFamily = state.health?.runner_family === "cmd" ? "cmd" : "bash";
+  const runnerCommand = state.health?.runner_help_command ?? "bash scripts/kata.sh";
+  const showcaseCommand = state.health?.showcase_start_command ?? "bash scripts/kata.sh showcase serve";
 
   container.innerHTML = `
     <div class="nav-groups">
@@ -71,8 +74,8 @@ function renderNav() {
       ).join("")}
     </div>
     <div class="nav-actions">
-      <button class="copy-button secondary" data-copy="bash scripts/kata.sh">Copiar runner</button>
-      <button class="copy-button secondary" data-copy="bash scripts/kata.sh showcase serve">Copiar showcase</button>
+      <button class="copy-button secondary" data-copy="${escapeHtml(runnerCommand)}">Copiar runner ${runnerFamily}</button>
+      <button class="copy-button secondary" data-copy="${escapeHtml(showcaseCommand)}">Copiar showcase ${runnerFamily}</button>
     </div>
   `;
 }
