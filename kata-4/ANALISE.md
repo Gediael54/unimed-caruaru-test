@@ -41,6 +41,24 @@ Para 10 milhões de linhas a abordagem em memória deve ser substituída ou limi
 
 Os testes cobrem parsing de datas, parsing de valores monetários, normalização de cidades, joins, cálculo de atraso, tratamento de entregas órfãs, política de duplicidades, execução com arquivos vazios, idempotência dos artefatos e saída de indicadores.
 
+## Organização Do Projeto Python
+
+O `kata-4` foi reorganizado para um formato mais próximo de projeto real:
+
+- `src/report_pipeline/app.py`: implementação principal do pipeline;
+- `tests/test_pipeline.py`: suíte automatizada;
+- `pipeline.py`: wrapper fino de compatibilidade para preservar os comandos documentados;
+- `pyproject.toml`: metadados do mini projeto.
+
+Essa mudança foi feita para que o pipeline não parecesse apenas um script isolado que já "sabe" a resposta esperada. A regra de negócio, a CLI e os testes continuam reais, mas agora ficam apresentados com uma estrutura que lembra mais um projeto Python do dia a dia.
+
+Trade-off:
+
+- ganho: separação explícita entre implementação, testes e entrypoint;
+- ganho: leitura mais profissional para avaliação;
+- custo: `app.py` continua centralizando a lógica, então a divisão em módulos ainda não foi levada ao limite;
+- custo: existe um wrapper adicional na raiz por compatibilidade.
+
 ## Forma de Apresentação do Pipeline
 
 O pipeline não deveria apenas gerar os arquivos corretos; a saída no terminal também precisava ser legível e parecer resultado executado.
@@ -199,15 +217,19 @@ Isso acontece porque:
 
 Na prática, rodar duas vezes com os mesmos CSVs produz o mesmo `consolidated.csv` e o mesmo `indicators.json`.
 
-## Estrutura do Código: Por Que Mantive Arquivo Único
+## Estrutura do Código: Por Que Mantive Um Módulo Principal
 
-Avaliei separar o pipeline em `loaders.py`, `normalizers.py`, `writers.py` e `indicators.py`. Não fiz isso porque:
+Mesmo com a mudança para `src/report_pipeline/`, avaliei separar o pipeline em `loaders.py`, `normalizers.py`, `writers.py` e `indicators.py`. Não fiz isso nesta entrega porque:
 
-- o volume ainda é pequeno;
-- as responsabilidades continuam legíveis em um único arquivo;
-- a leitura do avaliador fica mais rápida.
+- o volume ainda é administrável;
+- a leitura continua rápida para avaliação;
+- a prioridade aqui era primeiro separar projeto, testes e entrypoint sem introduzir refatoração excessiva.
 
-A decisão foi: manter um arquivo único, mas com funções curtas e uma CLI explícita com `argparse`.
+A decisão final foi intermediária:
+
+- sair do formato "script único na raiz";
+- manter a lógica principal concentrada em `src/report_pipeline/app.py`;
+- deixar uma próxima etapa de modularização mais fina como evolução natural, não como complexidade antecipada.
 
 ## Escalando Para 10 Milhões de Linhas
 
@@ -255,5 +277,5 @@ Além dos testes de integração com CSVs completos, os testes cobrem:
 
 Medição local:
 
-- `pipeline.py` fecha `100%` de cobertura de linha via `trace` da stdlib;
-- a suíte atual tem `20` testes automatizados em `kata-4/test_pipeline.py`.
+- `src/report_pipeline/app.py` fecha `100%` de cobertura de linha via `trace` da stdlib;
+- a suíte atual tem `25` testes automatizados em `kata-4/tests/test_pipeline.py`.
