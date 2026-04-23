@@ -46,7 +46,7 @@ function startShowcase() {
       `Dependências ausentes no bootstrap: ${missing.join(", ")}.`,
       "Faça um hard refresh no navegador: Ctrl+Shift+R.",
       "Confirme no terminal do showcase se os arquivos /js/core.js, /js/render.js, /js/explorer.js e /js/events.js aparecem no log HTTP.",
-      "Se o problema persistir, reinicie com bash scripts/kata.sh showcase serve.",
+      "Se o problema persistir, reinicie o showcase pelo runner oficial.",
     ]);
     return;
   }
