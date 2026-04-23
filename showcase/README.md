@@ -48,6 +48,9 @@ O showcase nao exige `npm install`, `pip install` ou outro frontend separado.
 bash scripts/kata.sh showcase serve
 ```
 
+Essa opcao e a mais alinhada com a documentacao do repositorio porque o showcase, os READMEs e o runner principal usam a mesma familia de comandos em `bash`.
+Ela tambem e a melhor forma de revisar o proprio runner do projeto, nao apenas o resultado final das katas.
+
 Ou manualmente:
 
 ```bash
@@ -62,6 +65,7 @@ showcase\start.cmd
 ```
 
 Os dois comandos acima passam pelos mesmos checks de Python e exibem a mesma mensagem de erro.
+No Windows nativo eles existem como caminho funcional de execucao, mas o runner em `bash` continua sendo a experiencia principal de revisao.
 
 Depois, abra:
 
