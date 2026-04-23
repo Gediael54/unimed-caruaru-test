@@ -20,6 +20,7 @@ KATA2_WEB_DIR="kata-2/frontend"
 KATA2_API_PROJECT="kata-2/backend/TaskBoard.Api.csproj"
 KATA2_ARTIFACTS_DIR="kata-2/artifacts"
 KATA2_LOG_FILE="$KATA2_ARTIFACTS_DIR/logs/backend.log"
+PYTHON_BIN=""
 
 # ---------------------------------------------------------------------------
 # Paleta de cores — identidade Unimed (verde). Degrada para texto sem cor
@@ -198,9 +199,105 @@ print_help_note() {
   printf '     %s\n' "$1"
 }
 
+resolve_python_bin() {
+  if [[ -n "$PYTHON_BIN" ]]; then
+    return 0
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+    return 0
+  fi
+
+  if command -v python >/dev/null 2>&1 && \
+    python -c 'import sys; raise SystemExit(0 if sys.version_info.major >= 3 else 1)' >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+    return 0
+  fi
+
+  return 1
+}
+
+python_cmd() {
+  printf '%s' "${PYTHON_BIN:-python3}"
+}
+
+print_missing_command_guidance() {
+  local command_name="$1"
+  case "$command_name" in
+    python|python3)
+      print_info "Instale Python 3.11+."
+      print_info "No Windows, use: winget install -e --id Python.Python.3.12 --scope machine"
+      print_info "Se acabou de instalar, feche o terminal atual, abra outro e teste: py -3 --version ou python --version"
+      ;;
+    dotnet)
+      print_info "Instale .NET SDK 10 e confirme com: dotnet --version"
+      ;;
+    npm|node)
+      print_info "Instale Node.js 22 LTS ou 20.19+; o npm vem junto"
+      print_info "Depois confirme com: node --version e npm --version"
+      ;;
+    curl)
+      print_info "Instale curl para usar o fluxo integrado em bash (kata2 dev)"
+      print_info "No Windows nativo, voce pode usar: scripts\\kata.cmd kata2 dev"
+      ;;
+  esac
+}
+
+require_python() {
+  if resolve_python_bin; then
+    return 0
+  fi
+
+  print_error "Python 3 nao encontrado no ambiente."
+  print_missing_command_guidance python3
+  return 127
+}
+
+require_kata2_restore() {
+  local backend_assets="$ROOT_DIR/kata-2/backend/obj/project.assets.json"
+  local tests_assets="$ROOT_DIR/kata-2/backend.tests/obj/project.assets.json"
+  if [[ -f "$backend_assets" && -f "$tests_assets" ]]; then
+    return 0
+  fi
+
+  print_error "Pacotes .NET da Kata 2 ainda nao foram restaurados."
+  print_info "Rode: dotnet restore $KATA2_TESTS_PROJECT"
+  print_info "Ou use: bash scripts/kata.sh kata2 backend-restore"
+  return 1
+}
+
+require_kata2_frontend_dependencies() {
+  if [[ -d "$ROOT_DIR/$KATA2_WEB_DIR/node_modules" ]]; then
+    return 0
+  fi
+
+  print_error "Dependencias do frontend da Kata 2 ainda nao foram instaladas."
+  print_info "Rode: npm --prefix $KATA2_WEB_DIR install"
+  print_info "Ou use: bash scripts/kata.sh kata2 frontend-install"
+  return 1
+}
+
 # ---------------------------------------------------------------------------
 # Detecção de ambiente (exibido no menu principal)
 # ---------------------------------------------------------------------------
+
+detect_python_status() {
+  if resolve_python_bin; then
+    local version
+    version="$("$(python_cmd)" --version 2>&1 | head -n 1)"
+    version="${version:-disponivel}"
+    printf '%b%s%b %-9s %b%s%b' \
+      "${COLOR_GREEN}" "${ICON_OK}" "${COLOR_RESET}" \
+      "$(python_cmd)" \
+      "${COLOR_DIM}" "$version" "${COLOR_RESET}"
+  else
+    printf '%b%s%b %-9s %bnao encontrado%b' \
+      "${COLOR_RED}" "${ICON_ERR}" "${COLOR_RESET}" \
+      "python3" \
+      "${COLOR_RED}" "${COLOR_RESET}"
+  fi
+}
 
 detect_tool_status() {
   local tool="$1"
@@ -223,8 +320,9 @@ detect_tool_status() {
 
 print_environment_panel() {
   print_section "AMBIENTE DETECTADO"
-  printf '  %s\n' "$(detect_tool_status python3 'python3 --version')"
+  printf '  %s\n' "$(detect_python_status)"
   printf '  %s\n' "$(detect_tool_status dotnet  'dotnet --version')"
+  printf '  %s\n' "$(detect_tool_status node    'node --version')"
   printf '  %s\n' "$(detect_tool_status npm     'npm --version')"
   printf '  %s\n' "$(detect_tool_status curl    'curl --version | head -n 1 | awk "{print \$2}"')"
 }
@@ -299,6 +397,7 @@ require_command() {
   local command_name="$1"
   if ! command -v "$command_name" >/dev/null 2>&1; then
     print_error "Comando '$command_name' nao encontrado no ambiente."
+    print_missing_command_guidance "$command_name"
     return 127
   fi
 }
@@ -315,33 +414,33 @@ require_commands() {
 # ---------------------------------------------------------------------------
 
 kata1_verify() {
-  require_command python3 || return $?
-  run_step "Kata 1 · validacao completa resumida" python3 kata-1/verify.py
+  require_python || return $?
+  run_step "Kata 1 · validacao completa resumida" "$(python_cmd)" kata-1/verify.py
 }
 
 kata1_verify_verbose() {
-  require_command python3 || return $?
-  run_step "Kata 1 · validacao completa detalhada" python3 kata-1/verify.py --mode full-verbose
+  require_python || return $?
+  run_step "Kata 1 · validacao completa detalhada" "$(python_cmd)" kata-1/verify.py --mode full-verbose
 }
 
 kata1_tests() {
-  require_command python3 || return $?
-  run_step "Kata 1 · testes unitarios" python3 -m unittest discover -s kata-1 -p 'test_*.py'
+  require_python || return $?
+  run_step "Kata 1 · testes unitarios" "$(python_cmd)" -m unittest discover -s kata-1 -p 'test_*.py'
 }
 
 kata1_demo() {
-  require_command python3 || return $?
-  run_step "Kata 1 · exemplos executaveis" python3 kata-1/verify.py --mode demo
+  require_python || return $?
+  run_step "Kata 1 · exemplos executaveis" "$(python_cmd)" kata-1/verify.py --mode demo
 }
 
 kata1_benchmark() {
-  require_command python3 || return $?
-  run_step "Kata 1 · benchmark ilustrativo" python3 kata-1/verify.py --mode benchmark
+  require_python || return $?
+  run_step "Kata 1 · benchmark ilustrativo" "$(python_cmd)" kata-1/verify.py --mode benchmark
 }
 
 kata1_explore() {
-  require_command python3 || return $?
-  run_step "Kata 1 · explorer interativo" python3 kata-1/explore.py
+  require_python || return $?
+  run_step "Kata 1 · explorer interativo" "$(python_cmd)" kata-1/explore.py
 }
 
 # ---------------------------------------------------------------------------
@@ -350,6 +449,7 @@ kata1_explore() {
 
 kata2_backend_build() {
   require_command dotnet || return $?
+  require_kata2_restore || return $?
   run_step "Kata 2 · build do backend" \
     dotnet build "$KATA2_API_PROJECT" --no-restore
 }
@@ -368,12 +468,14 @@ kata2_backend_dev() {
 
 kata2_backend_tests() {
   require_command dotnet || return $?
+  require_kata2_restore || return $?
   run_step "Kata 2 · testes unitarios do backend" \
     dotnet run --project "$KATA2_TESTS_PROJECT" --no-restore -- backend
 }
 
 kata2_api_tests() {
   require_command dotnet || return $?
+  require_kata2_restore || return $?
   run_step "Kata 2 · testes de contrato da API" \
     dotnet run --project "$KATA2_TESTS_PROJECT" --no-restore -- api
 }
@@ -391,16 +493,19 @@ kata2_frontend_install() {
 
 kata2_frontend_build() {
   require_command npm || return $?
+  require_kata2_frontend_dependencies || return $?
   run_step "Kata 2 · build do frontend" npm --prefix "$KATA2_WEB_DIR" run build
 }
 
 kata2_frontend_tests() {
   require_command npm || return $?
+  require_kata2_frontend_dependencies || return $?
   run_step "Kata 2 · testes do frontend" npm --prefix "$KATA2_WEB_DIR" run test
 }
 
 kata2_frontend_lint() {
   require_command npm || return $?
+  require_kata2_frontend_dependencies || return $?
   run_step "Kata 2 · lint do frontend" npm --prefix "$KATA2_WEB_DIR" run lint
 }
 
@@ -412,6 +517,7 @@ kata2_frontend_audit() {
 
 kata2_frontend_dev() {
   require_command npm || return $?
+  require_kata2_frontend_dependencies || return $?
   run_step "Kata 2 · frontend em modo desenvolvimento" npm --prefix "$KATA2_WEB_DIR" run dev
 }
 
@@ -513,6 +619,7 @@ kata2_dev_cleanup() {
 
 kata2_dev() {
   require_commands dotnet npm curl || return $?
+  require_kata2_frontend_dependencies || return $?
   kata2_dev_prepare_log
   kata2_dev_print_header
   kata2_dev_start_backend
@@ -539,13 +646,13 @@ kata2_all() {
 # ---------------------------------------------------------------------------
 
 kata4_pipeline() {
-  require_command python3 || return $?
-  run_step "Kata 4 · pipeline" python3 kata-4/pipeline.py
+  require_python || return $?
+  run_step "Kata 4 · pipeline" "$(python_cmd)" kata-4/pipeline.py
 }
 
 kata4_tests() {
-  require_command python3 || return $?
-  run_step "Kata 4 · testes" python3 -m unittest discover -s kata-4 -p 'test_*.py'
+  require_python || return $?
+  run_step "Kata 4 · testes" "$(python_cmd)" -m unittest discover -s kata-4 -p 'test_*.py'
 }
 
 kata4_all() {
@@ -563,7 +670,7 @@ validate_all() {
 }
 
 showcase_serve() {
-  require_command python3 || return $?
+  require_python || return $?
   print_box_header "SHOWCASE · PORTAL VISUAL DO REPOSITORIO"
   print_metadata_line "URL" "http://localhost:${SHOWCASE_PORT}"
   print_metadata_line "Origem" "showcase/"
@@ -574,7 +681,7 @@ showcase_serve() {
 
   (
     cd "$ROOT_DIR" && \
-    python3 showcase/server.py --port "$SHOWCASE_PORT"
+    "$(python_cmd)" showcase/server.py --port "$SHOWCASE_PORT"
   )
   local exit_code=$?
 
@@ -587,9 +694,9 @@ showcase_serve() {
 }
 
 showcase_tests() {
-  require_command python3 || return $?
+  require_python || return $?
   run_step "Showcase · testes da API local" \
-    python3 -m unittest discover -s showcase -p 'test_*.py'
+    "$(python_cmd)" -m unittest discover -s showcase -p 'test_*.py'
 }
 
 declare -A KATA1_MENU_ACTIONS=(
