@@ -397,6 +397,20 @@ function renderDocViewer(docId, options = {}) {
 
   const doc = state.docCache[docId];
   const docMeta = getDoc(docId);
+  const docError = state.docErrors[docId];
+  if (docError) {
+    const docTitle = docMeta ? docMeta.title : "Documento";
+    return `
+      <div class="doc-viewer empty-state doc-viewer-error">
+        <p class="overline">${escapeHtml(docTitle)}</p>
+        <p>${escapeHtml(docError.message)}</p>
+        <p class="doc-error-hint">${escapeHtml(docError.hint)}</p>
+        <button class="copy-button" data-retry-doc="${docId}" data-retry-doc-route="${options.route ?? "docs"}">
+          Tentar de novo
+        </button>
+      </div>
+    `;
+  }
   if (!doc && docMeta) {
     if (state.activeDocId === docId) {
       return `
@@ -468,10 +482,6 @@ function renderCommandCards(commandIds, options = {}) {
       ${commands.map((command) => renderCommandCard(command, options)).join("")}
     </div>
   `;
-}
-
-function isMultilineValue(value) {
-  return typeof value === "string" && value.includes("\n");
 }
 
 function truncatePreview(value, maxLength = 96) {
@@ -589,6 +599,48 @@ function renderCommandArtifacts(artifacts, options = {}) {
   `;
 }
 
+function renderAccessLinkItem(link, options = {}) {
+  const url = link.url;
+  const isPrimary = isFrontendLink(link);
+  const probe = state.accessProbes[url];
+  const ready = Boolean(probe?.ready);
+  const probing = Boolean(options.probing);
+  const variant = isPrimary ? "primary" : "secondary";
+  const disabled = isPrimary && !ready;
+  const statusLabel = !isPrimary
+    ? ""
+    : ready
+      ? "servidor pronto"
+      : probing
+        ? "aguardando servidor…"
+        : "servidor indisponível";
+  const statusTone = !isPrimary
+    ? ""
+    : ready
+      ? "tone-ok"
+      : probing
+        ? "tone-live"
+        : "tone-muted";
+  const classes = [
+    "copy-button",
+    variant,
+    "access-link",
+    isPrimary ? "access-link-primary" : "",
+    disabled ? "is-disabled" : "",
+  ].filter(Boolean).join(" ");
+
+  const anchor = disabled
+    ? `<span class="${classes}" role="link" aria-disabled="true">${escapeHtml(link.label)}</span>`
+    : `<a class="${classes}" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(link.label)}</a>`;
+
+  return `
+    <div class="access-link-group">
+      ${anchor}
+      ${statusLabel ? `<span class="badge ${statusTone}">${escapeHtml(statusLabel)}</span>` : ""}
+    </div>
+  `;
+}
+
 function renderAccessLinks(links, options = {}) {
   if (!Array.isArray(links) || links.length === 0) {
     return "";
@@ -597,40 +649,10 @@ function renderAccessLinks(links, options = {}) {
   return `
     <div class="command-access-links ${options.compact ? "command-access-links-compact" : ""}">
       <span class="command-artifacts-label">Acessos rápidos</span>
-      <div class="command-actions">
-        ${links.map((link) => `
-          <a class="copy-button secondary" href="${escapeHtml(link.url)}" target="_blank" rel="noreferrer">
-            ${escapeHtml(link.label)}
-          </a>
-        `).join("")}
+      <div class="command-actions access-link-row">
+        ${links.map((link) => renderAccessLinkItem(link, options)).join("")}
       </div>
     </div>
-  `;
-}
-
-function renderCommandCopyActions(runnerCommand, manualCommand, options = {}) {
-  const runner = runnerCommand ? escapeHtml(runnerCommand) : "";
-  const manual = manualCommand ? escapeHtml(manualCommand) : "";
-  const compact = Boolean(options.compact);
-
-  if (!runner && !manual) {
-    return "";
-  }
-
-  if (!manual || manual === runner) {
-    return renderCopyButton(compact ? "Copiar" : "Copiar comando", runnerCommand || manualCommand);
-  }
-
-  if (compact) {
-    return renderCopyButton("Copiar runner", runnerCommand);
-  }
-
-  const manualLabel = compact
-    ? "Copiar manual"
-    : isMultilineValue(manualCommand) ? "Copiar instruções manuais" : "Copiar manual";
-  return `
-    ${renderCopyButton("Copiar runner", runnerCommand)}
-    ${renderCopyButton(manualLabel, manualCommand)}
   `;
 }
 
@@ -1123,12 +1145,11 @@ function renderRunConsole() {
 
       <div class="command-actions">
         ${run.command_id ? `<button class="copy-button" data-run-command="${escapeHtml(run.command_id)}">Executar novamente</button>` : ""}
-        ${renderCommandCopyActions(run.runner_command ?? "", run.manual_command ?? "")}
         ${run.output ? `<button class="copy-button secondary" data-copy-active-run-output="true">Copiar saída</button>` : ""}
         ${(run.status === "running" || run.status === "queued" || run.status === "starting") ? `<button class="copy-button secondary" data-cancel-active-run="true">Cancelar execução</button>` : ""}
       </div>
 
-      ${canOpenTargets ? renderAccessLinks(run.access_links) : ""}
+      ${canOpenTargets ? renderAccessLinks(run.access_links, { probing: isLive }) : ""}
 
       <div class="callout">
         Markdown e exemplos ficam na rota de docs. Aqui entram apenas o job ativo, o estado da execução e o retorno real entregue pela API local do showcase.
@@ -1498,7 +1519,11 @@ function syncRouteData() {
       void ensureDocContent(state.docs[0].id);
       return;
     }
-    if (state.activeDocId && !state.docCache[state.activeDocId]) {
+    if (
+      state.activeDocId
+      && !state.docCache[state.activeDocId]
+      && !state.docErrors[state.activeDocId]
+    ) {
       void ensureDocContent(state.activeDocId);
     }
   }
@@ -1508,7 +1533,7 @@ function syncRouteData() {
       void loadDocs();
       return;
     }
-    if (!state.docCache["kata3-plano"]) {
+    if (!state.docCache["kata3-plano"] && !state.docErrors["kata3-plano"]) {
       void ensureDocContent("kata3-plano");
     }
   }
