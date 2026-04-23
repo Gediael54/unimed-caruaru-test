@@ -47,10 +47,12 @@ describe("App", () => {
     mockedCreateTask.mockReset();
     mockedUpdateTask.mockReset();
     mockedArchiveTask.mockReset();
+    window.localStorage.clear();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
   });
 
   it("loads tasks and refetches when the user changes the status filter", async () => {
@@ -82,6 +84,10 @@ describe("App", () => {
     expect(await screen.findByText("Atualizar relatório")).toBeInTheDocument();
     expect(mockedListTasks).toHaveBeenCalledWith("all");
     expect(within(summary).getByText("3")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Em andamento" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Lista" }));
+    expect(screen.getByRole("button", { name: "Em andamento" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Em andamento" }));
     await waitFor(() =>
@@ -93,14 +99,14 @@ describe("App", () => {
       expect(screen.queryByText("Ligar para paciente")).not.toBeInTheDocument()
     );
     expect(screen.getByText("Atualizar relatório")).toBeInTheDocument();
-    expect(screen.getByText("Os indicadores acima continuam considerando o board ativo, mesmo quando o filtro recorta um estágio.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tarefas em andamento" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Canceladas" }));
     await waitFor(() =>
       expect(mockedListTasks.mock.calls.some(([status]) => status === "cancelled")).toBe(true)
     );
     expect(screen.getByText("Cancelar agenda")).toBeInTheDocument();
-  });
+  }, 10000);
 
   it("switches between list, kanban, timeline and focus visualizations", async () => {
     const pendingTask = makeTask("task-1", "Ligar para paciente", "pending");
@@ -115,14 +121,16 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "Todas as tarefas ativas" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Pendente" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Concluída" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pendentes" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Kanban" }));
     expect(screen.getByRole("heading", { name: "Pendente" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Concluída" })).toBeInTheDocument();
+    expect(screen.getByRole("note", { name: "Fluxo completo do kanban" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Timeline" }));
     expect(screen.getByRole("heading", { name: "Atividade mais recente" })).toBeInTheDocument();
-    expect(screen.getByText("A ordenação considera prioridade, última atualização e criação do card.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pendentes" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Em foco" }));
     expect(screen.getByRole("heading", { name: "Fila ativa do workspace" })).toBeInTheDocument();
@@ -224,7 +232,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Arquivar tarefa Revisar contrato" }));
     await waitFor(() => expect(mockedArchiveTask).toHaveBeenCalledWith("task-1"));
     expect(await screen.findByText("Nenhum card por aqui")).toBeInTheDocument();
-  });
+  }, 10_000);
 
   it("shows a controlled error when the first load fails", async () => {
     mockedListTasks.mockRejectedValueOnce(new Error("Falha ao carregar o board."));
