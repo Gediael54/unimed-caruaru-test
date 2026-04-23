@@ -5,6 +5,7 @@
 # Dois caminhos para o avaliador:
 #   1) Menu interativo ............. bash scripts/kata.sh
 #   2) Comando direto .............. bash scripts/kata.sh <escopo> <acao>
+# No Windows nativo, scripts/kata.cmd existe como fallback funcional.
 #
 # Tudo que o enunciado pede (Partes obrigatórias) está destacado no menu
 # e também pode ser rodado manualmente — veja a seção "Ajuda" ou o README.
