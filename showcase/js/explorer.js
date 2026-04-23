@@ -587,7 +587,7 @@ async function runRemoteVolumeSimulation(count, token) {
     activeVolumeJobId = null;
     renderVolumeError(
       "API local indisponível",
-      "Para volumes acima de 2.000, use `bash scripts/kata.sh showcase serve` ou `python3 showcase/server.py`.",
+      "Para volumes acima de 2.000, use o runner oficial do showcase ou rode o servidor diretamente.",
     );
   }
 }
