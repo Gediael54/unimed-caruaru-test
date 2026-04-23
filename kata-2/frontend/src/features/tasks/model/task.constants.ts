@@ -2,6 +2,7 @@ import type {
   ActiveTaskStatus,
   TaskFilter,
   TaskPriority,
+  TaskSortMode,
   TaskStatus,
   TaskViewMode
 } from "./task.types";
@@ -89,3 +90,13 @@ export const PRIORITY_DESCRIPTIONS: Record<TaskPriority, string> = {
   medium: "Importante para o ritmo normal do board.",
   high: "Precisa de atenção antes das demais."
 };
+
+export const TASK_SORT_OPTIONS: Array<{
+  label: string;
+  value: TaskSortMode;
+}> = [
+  { label: "Prioridade", value: "priority" },
+  { label: "Mais recente", value: "recent" },
+  { label: "Criação", value: "created" },
+  { label: "Título", value: "title" }
+];
