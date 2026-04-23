@@ -19,6 +19,7 @@ MAX_PRIORITY = URGENCY_PRIORITY["CRÍTICA"]
 MIN_PRIORITY = URGENCY_PRIORITY["BAIXA"]
 ELDERLY_AGE_THRESHOLD = 60
 MINOR_AGE_THRESHOLD = 18
+MAX_AGE = 130
 ELDERLY_PROMOTION_SOURCE_PRIORITY = URGENCY_PRIORITY["MÉDIA"]
 ELDERLY_PROMOTION_TARGET_PRIORITY = URGENCY_PRIORITY["ALTA"]
 
@@ -116,6 +117,8 @@ def calculate_adjusted_priority(patient: Patient) -> int:
         raise ValueError("Age must be an integer.")
     if patient.age < 0:
         raise ValueError("Age must be non-negative.")
+    if patient.age > MAX_AGE:
+        raise ValueError(f"Age must be at most {MAX_AGE}.")
 
     urgency = canonical_urgency(patient.urgency)
     priority = URGENCY_PRIORITY[urgency]
