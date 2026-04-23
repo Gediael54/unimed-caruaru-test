@@ -385,6 +385,8 @@ class ShowcaseHandlerTests(unittest.TestCase):
 
         self.assertEqual(captured["status"], server.HTTPStatus.OK)
         self.assertTrue(captured["payload"]["ok"])
+        self.assertEqual(captured["payload"]["runner_help_command"], server.runner_command("help"))
+        self.assertEqual(captured["payload"]["showcase_start_command"], server.runner_command("showcase", "serve"))
 
     def test_get_root_returns_index_html_with_asset_version(self) -> None:
         handler = self.make_handler("/")
