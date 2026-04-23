@@ -430,7 +430,7 @@ async function ensureDocContent(docId, options = {}) {
     } catch {
       state.docErrors[docId] = {
         message: "Não foi possível carregar este documento pelo showcase.",
-        hint: "Garanta que o servidor local do showcase esteja ativo (bash scripts/kata.sh showcase serve) e tente de novo.",
+        hint: "Garanta que o servidor local do showcase esteja ativo pelo runner oficial e tente de novo.",
       };
       return null;
     } finally {
@@ -528,7 +528,7 @@ async function startCommandRun(commandId) {
       stage_label: "Falha na comunicação local",
       output_complete: true,
         note: "Falha ao falar com a API local do showcase.",
-      output: "A API local do showcase não respondeu. Inicie com `bash scripts/kata.sh showcase serve`.",
+      output: "A API local do showcase não respondeu. Inicie o showcase pelo runner oficial.",
     };
     refreshExecutionRegion({ focus: true });
   }
