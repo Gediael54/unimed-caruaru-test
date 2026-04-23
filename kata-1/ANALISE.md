@@ -40,13 +40,15 @@ Trade-off: .NET deixaria a solução mais “corporativa”, mas menos enxuta pa
 
 ## Arquitetura de Pastas e Responsabilidades
 
-O `kata-1` foi mantido propositalmente plano:
+O `kata-1` foi reorganizado para um formato mais próximo de projeto Python real:
 
-- `triage.py`: regra de domínio e estruturas de dados
-- `test_triage.py`: testes unitários e de integração
-- `schema.sql`: modelagem SQL e consulta equivalente
-- `verify.py`: validação executável
-- `ANALISE.md`: decisões e trade-offs
+- `src/triage_queue/domain.py`: regra de domínio, parsing e estruturas de dados;
+- `src/triage_queue/verify_cli.py`: validação executável, cobertura, benchmark e rastreabilidade;
+- `src/triage_queue/explore_cli.py`: exploração guiada e simulação de volume;
+- `tests/test_triage.py`: testes unitários e de integração;
+- `schema.sql`: modelagem SQL e consulta equivalente;
+- `triage.py`, `verify.py`, `explore.py`: wrappers finos de compatibilidade;
+- `pyproject.toml`: metadados do mini projeto.
 
 Além disso, o repositório expõe um runner em `scripts/kata.sh`. Para a Kata 1, as entradas principais são:
 
@@ -55,21 +57,24 @@ Além disso, o repositório expõe um runner em `scripts/kata.sh`. Para a Kata 1
 - `bash scripts/kata.sh kata1 demo`
 - `bash scripts/kata.sh kata1 benchmark`
 
-### Por que manter a pasta plana
+### Por que mover para `src/` e `tests/`
 
-- O kata é pequeno e tem um único módulo central.
-- Quebrar em muitas camadas aumentaria navegação sem ganho real.
-- Para o avaliador, abrir poucos arquivos e entender tudo rápido é melhor.
+- Resolve a aparência de "scripts soltos" na raiz.
+- Deixa explícito onde está a implementação real e onde está a suíte.
+- Aproxima a entrega de um projeto pequeno, mas profissional.
 
-### Por que não dividir o Python em vários módulos
+### Por que manter wrappers finos na raiz
 
-Considerei separar parsing, priorização e fila contínua. Não fiz isso porque:
+- O runner, o showcase e a documentação já apontavam para `verify.py`, `explore.py` e `triage.py`.
+- Quebrar esses entrypoints só para forçar a nova arquitetura aumentaria atrito de avaliação.
+- O wrapper deixa claro que existe uma fronteira entre compatibilidade de execução e implementação real.
 
-- o volume atual ainda cabe confortavelmente em um arquivo;
-- a coesão é alta;
-- a divisão aumentaria estrutura antes de haver necessidade real.
+Trade-off:
 
-Se o escopo crescesse, a separação natural seria em `parsing.py`, `priority_rules.py`, `queueing.py` e `models.py`.
+- ganho: arquitetura mais profissional e auditável;
+- ganho: separação mais clara entre domínio, testes e entrypoints;
+- custo: alguns arquivos extras;
+- custo: passa a existir uma camada de compatibilidade na raiz do kata.
 
 ## Nomenclatura
 
@@ -125,7 +130,7 @@ Nem todo literal é um problema. O importante é separar:
 
 ### Constantes de domínio
 
-No `triage.py`, os limiares etários e a promoção de prioridade foram nomeados:
+No módulo `src/triage_queue/domain.py`, os limiares etários e a promoção de prioridade foram nomeados:
 
 - `ELDERLY_AGE_THRESHOLD = 60`
 - `MINOR_AGE_THRESHOLD = 18`
@@ -398,7 +403,7 @@ A suíte cobre:
 Além dos testes, o `verify.py` produz evidência executável:
 
 1. executa testes
-2. mede cobertura de `triage.py`
+2. mede cobertura de `src/triage_queue/domain.py`
 3. valida o schema
 4. mostra a demonstração
 5. rastreia requisitos do enunciado
