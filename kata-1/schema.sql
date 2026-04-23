@@ -212,6 +212,7 @@ SELECT
     c.status
 FROM computed c
 JOIN urgency_levels u ON u.code = c.adjusted_urgency_computed
+WHERE c.status = 'WAITING'
 ORDER BY
     u.numeric_priority DESC,
     c.arrived_at        ASC,
