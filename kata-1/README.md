@@ -2,12 +2,26 @@
 
 ## O que esta pasta entrega
 
-- `triage.py`: implementacao da ordenacao da fila e estrutura adicional para operacao continua;
-- `test_triage.py`: testes unitarios e de integracao;
+- `src/triage_queue/domain.py`: implementacao real da ordenacao da fila e estrutura adicional para operacao continua;
+- `src/triage_queue/verify_cli.py`: validacao executavel e benchmark;
+- `src/triage_queue/explore_cli.py`: explorer interativo;
+- `tests/test_triage.py`: testes unitarios e de integracao;
 - `schema.sql`: modelagem SQL e view com a mesma logica de priorizacao;
-- `verify.py`: validacao executavel com rastreabilidade do enunciado;
-- `explore.py`: explorer interativo para rodar casos isolados e simular volume;
+- `verify.py`: wrapper de compatibilidade para manter os comandos documentados;
+- `explore.py`: wrapper de compatibilidade para manter os comandos documentados;
+- `triage.py`: wrapper de compatibilidade para import legado;
+- `pyproject.toml`: metadados do mini projeto Python;
 - `ANALISE.md`: decisoes de engenharia e trade-offs.
+
+## Trade-off da organizacao
+
+A implementacao saiu de uma pasta totalmente plana para um formato mais proximo de projeto real:
+
+- `src/` concentra a regra de negocio;
+- `tests/` deixa a suite explicita;
+- wrappers na raiz preservam os comandos esperados pelo README, runner e showcase.
+
+Escolhi esse meio-termo porque melhora a arquitetura sem quebrar o fluxo de avaliacao.
 
 ## Como validar
 
