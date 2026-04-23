@@ -4,13 +4,19 @@ on:
   push:
     paths:
       - ".github/workflows/kata-2.yml"
+      - "global.json"
       - "kata-2/**"
-      - "scripts/kata.sh"
+      - "scripts/**"
+      - ".editorconfig"
+      - ".gitattributes"
   pull_request:
     paths:
       - ".github/workflows/kata-2.yml"
+      - "global.json"
       - "kata-2/**"
-      - "scripts/kata.sh"
+      - "scripts/**"
+      - ".editorconfig"
+      - ".gitattributes"
 
 permissions:
   contents: read
@@ -27,17 +33,38 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "10.0.x"
+          global-json-file: global.json
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version-file: "kata-2/frontend/.node-version"
           cache: "npm"
           cache-dependency-path: "kata-2/frontend/package-lock.json"
 
-      - name: Install frontend dependencies
-        run: npm --prefix kata-2/frontend ci
-
       - name: Run Kata 2 validation
         run: bash scripts/kata.sh kata2 all
+
+  validate-kata-2-windows:
+    name: Validate Kata 2 Windows Runner
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "kata-2/frontend/.node-version"
+          cache: "npm"
+          cache-dependency-path: "kata-2/frontend/package-lock.json"
+
+      - name: Run Kata 2 Windows validation
+        shell: cmd
+        run: scripts\kata.cmd kata2 all
