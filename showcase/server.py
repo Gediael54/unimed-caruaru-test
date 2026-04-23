@@ -61,17 +61,23 @@ DOCS_BY_ID = {spec["id"]: spec for spec in DOC_SPECS}
 
 
 WINDOWS_HOST = os.name == "nt"
+GIT_BASH_HOST = WINDOWS_HOST and bool(
+    os.environ.get("MSYSTEM")
+    or os.environ.get("MINGW_PREFIX")
+    or os.environ.get("GIT_BASH")
+)
+BASH_RUNNER_HOST = not WINDOWS_HOST or GIT_BASH_HOST
 
 
 def runner_command(*parts: str) -> str:
     joined = " ".join(parts)
-    if WINDOWS_HOST:
+    if not BASH_RUNNER_HOST:
         return f"scripts\\kata.cmd {joined}".strip()
     return f"bash scripts/kata.sh {joined}".strip()
 
 
 def runner_argv(*parts: str) -> list[str]:
-    if WINDOWS_HOST:
+    if not BASH_RUNNER_HOST:
         return ["cmd", "/c", "scripts\\kata.cmd", *parts]
     return ["bash", "scripts/kata.sh", *parts]
 
@@ -934,7 +940,7 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
                     "ok": True,
                     "showcase": "ready",
                     "commands": len(COMMAND_SPECS),
-                    "runner_family": "cmd" if WINDOWS_HOST else "bash",
+                    "runner_family": "bash" if BASH_RUNNER_HOST else "cmd",
                     "runner_help_command": runner_command("help"),
                     "showcase_start_command": runner_command("showcase", "serve"),
                 },
