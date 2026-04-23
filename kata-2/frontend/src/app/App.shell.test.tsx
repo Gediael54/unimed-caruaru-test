@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { useTaskBoardPage } from "../features/tasks/hooks/useTaskBoardPage";
-import type { Task } from "../features/tasks/model/task.types";
+import type { Task, TaskFilter } from "../features/tasks/model/task.types";
 
 vi.mock("../features/tasks/hooks/useTaskBoardPage", () => ({
   useTaskBoardPage: vi.fn()
@@ -325,14 +325,15 @@ describe("App shell states", () => {
       archiveTask: vi.fn(async () => true),
       changeTaskStatus: vi.fn(async () => true),
       error: null,
-      filter: "all" as Task["status"] | "all",
+      filter: "all" as TaskFilter,
       hasLoaded: true,
       isBusy: false,
       isLoading: false,
       isSubmitting: false,
       listLabel: "Todas as tarefas ativas",
-      setFilter: vi.fn((nextFilter: Task["status"] | "all") => {
-        boardState.filter = nextFilter;
+      setFilter: vi.fn((nextFilter: TaskFilter | ((previousFilter: TaskFilter) => TaskFilter)) => {
+        boardState.filter =
+          typeof nextFilter === "function" ? nextFilter(boardState.filter) : nextFilter;
       }),
       summary: {
         total: 1,
@@ -546,7 +547,7 @@ describe("App shell states", () => {
       archiveTask,
       changeTaskStatus,
       error: null,
-      filter: "all" as Task["status"] | "all",
+      filter: "all" as TaskFilter,
       hasLoaded: true,
       isBusy: false,
       isLoading: false,
@@ -651,7 +652,7 @@ describe("App shell states", () => {
       archiveTask: vi.fn(async () => true),
       changeTaskStatus,
       error: null,
-      filter: "all",
+      filter: "all" as TaskFilter,
       hasLoaded: true,
       isBusy: false,
       isLoading: false,
@@ -688,7 +689,7 @@ describe("App shell states", () => {
       archiveTask: vi.fn(async () => true),
       changeTaskStatus,
       error: null,
-      filter: "all",
+      filter: "all" as TaskFilter,
       hasLoaded: true,
       isBusy: false,
       isLoading: false,
