@@ -5,7 +5,8 @@ import type {
   CreateTaskInput,
   Task,
   TaskFilter,
-  TaskStatus
+  TaskStatus,
+  UpdateTaskInput
 } from "../model/task.types";
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -99,8 +100,28 @@ export function useTaskBoardPage() {
     try {
       await updateTask(id, { status });
       await loadBoard(filter, "Não foi possível atualizar o board após mover a tarefa.");
+      return true;
     } catch (requestError) {
       setError(getErrorMessage(requestError, "Não foi possível atualizar a tarefa."));
+      return false;
+    } finally {
+      setIsSubmitting(false);
+      setActiveTaskId(null);
+    }
+  }
+
+  async function updateTaskDetails(id: string, input: UpdateTaskInput) {
+    setIsSubmitting(true);
+    setActiveTaskId(id);
+    setError(null);
+
+    try {
+      await updateTask(id, input);
+      await loadBoard(filter, "Não foi possível atualizar o board após salvar o card.");
+      return true;
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, "Não foi possível salvar o card."));
+      return false;
     } finally {
       setIsSubmitting(false);
       setActiveTaskId(null);
@@ -115,8 +136,10 @@ export function useTaskBoardPage() {
     try {
       await archiveTask(id);
       await loadBoard(filter, "Não foi possível atualizar o board após arquivar a tarefa.");
+      return true;
     } catch (requestError) {
       setError(getErrorMessage(requestError, "Não foi possível arquivar a tarefa."));
+      return false;
     } finally {
       setIsSubmitting(false);
       setActiveTaskId(null);
@@ -137,6 +160,7 @@ export function useTaskBoardPage() {
     listLabel,
     setFilter,
     summary,
-    tasks
+    tasks,
+    updateTask: updateTaskDetails
   };
 }
