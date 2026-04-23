@@ -195,4 +195,34 @@ public sealed class TaskServiceTests
 
         Assert.Equal(200, repository.List(null).Count);
     }
+
+    [Fact]
+    public async Task Update_MergesConcurrentPartialUpdates()
+    {
+        var service = CreateService();
+        var created = service.Create(new CreateTaskRequest("Initial title")).Value!;
+        using var ready = new CountdownEvent(2);
+        using var start = new ManualResetEventSlim(false);
+
+        var titleTask = Task.Run(() =>
+        {
+            ready.Signal();
+            start.Wait();
+            return service.Update(created.Id, new UpdateTaskRequest("Merged title", null, null, null));
+        });
+        var priorityTask = Task.Run(() =>
+        {
+            ready.Signal();
+            start.Wait();
+            return service.Update(created.Id, new UpdateTaskRequest(null, null, "high", null));
+        });
+
+        ready.Wait();
+        start.Set();
+        await Task.WhenAll(titleTask, priorityTask);
+
+        var finalTask = service.Get(created.Id).Value!;
+        Assert.Equal("Merged title", finalTask.Title);
+        Assert.Equal("high", finalTask.Priority);
+    }
 }
