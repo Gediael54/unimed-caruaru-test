@@ -230,4 +230,53 @@ describe("useTaskBoardPage", () => {
       highPriority: 1
     });
   });
+
+  it("updates card details and refreshes the current board slice", async () => {
+    const originalTask = makeTask("task-1", "Review board flow", "pending", "high");
+    const updatedTask = { ...originalTask, title: "Review board flow updated" };
+
+    mockedListTasks
+      .mockResolvedValueOnce([originalTask])
+      .mockResolvedValueOnce([updatedTask]);
+    mockedUpdateTask.mockResolvedValue(updatedTask);
+
+    const { result } = renderHook(() => useTaskBoardPage());
+    await waitFor(() => expect(result.current.tasks).toEqual([originalTask]));
+
+    await act(async () => {
+      expect(
+        await result.current.updateTask("task-1", {
+          title: "Review board flow updated"
+        })
+      ).toBe(true);
+    });
+
+    expect(mockedUpdateTask).toHaveBeenCalledWith("task-1", {
+      title: "Review board flow updated"
+    });
+    expect(result.current.tasks).toEqual([updatedTask]);
+    expect(result.current.activeTaskId).toBeNull();
+    expect(result.current.isSubmitting).toBe(false);
+  });
+
+  it("falls back to the default edit error message for non-Error rejections", async () => {
+    const task = makeTask("task-1", "Review board flow", "pending");
+    mockedListTasks.mockResolvedValue([task]);
+    mockedUpdateTask.mockRejectedValue("network");
+
+    const { result } = renderHook(() => useTaskBoardPage());
+    await waitFor(() => expect(result.current.tasks).toEqual([task]));
+
+    await act(async () => {
+      expect(
+        await result.current.updateTask("task-1", {
+          title: "Review board flow updated"
+        })
+      ).toBe(false);
+    });
+
+    expect(result.current.error).toBe("Não foi possível salvar o card.");
+    expect(result.current.activeTaskId).toBeNull();
+    expect(result.current.isSubmitting).toBe(false);
+  });
 });
