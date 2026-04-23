@@ -1,6 +1,16 @@
+export type ParsedChecklistItem = {
+  done: boolean;
+  text: string;
+};
+
 export type ParsedTaskDescription = {
   assignees: string[];
   checklist: string[];
+  checklistItems: ParsedChecklistItem[];
+  checklistProgress: {
+    completed: number;
+    total: number;
+  };
   dueDate: string | null;
   labels: string[];
   summary: string | null;
@@ -14,6 +24,23 @@ const splitInlineValues = (value: string) =>
 
 const unique = (values: string[]) => [...new Set(values)];
 
+function parseChecklistEntry(rawValue: string): ParsedChecklistItem {
+  const value = rawValue.trim();
+  const markedMatch = value.match(/^\[(x| )\]\s*(.+)$/i);
+
+  if (markedMatch) {
+    return {
+      done: markedMatch[1].toLowerCase() === "x",
+      text: markedMatch[2].trim()
+    };
+  }
+
+  return {
+    done: false,
+    text: value
+  };
+}
+
 export function parseTaskDescription(description: string | null): ParsedTaskDescription {
   const lines = (description ?? "")
     .split(/\r?\n/)
@@ -23,7 +50,7 @@ export function parseTaskDescription(description: string | null): ParsedTaskDesc
   const summary: string[] = [];
   const labels: string[] = [];
   const assignees: string[] = [];
-  const checklist: string[] = [];
+  const checklistItems: ParsedChecklistItem[] = [];
   let dueDate: string | null = null;
   let collectingChecklist = false;
 
@@ -53,7 +80,7 @@ export function parseTaskDescription(description: string | null): ParsedTaskDesc
     if (checklistMatch) {
       const inlineItems = checklistMatch[1].trim();
       if (inlineItems) {
-        checklist.push(...splitInlineValues(inlineItems));
+        checklistItems.push(...splitInlineValues(inlineItems).map(parseChecklistEntry));
       }
       collectingChecklist = true;
       continue;
@@ -61,21 +88,28 @@ export function parseTaskDescription(description: string | null): ParsedTaskDesc
 
     const bulletMatch = line.match(/^[-*]\s+(.*)$/);
     if (bulletMatch) {
-      checklist.push(bulletMatch[1].trim());
+      checklistItems.push(parseChecklistEntry(bulletMatch[1].trim()));
       continue;
     }
 
     if (collectingChecklist) {
-      checklist.push(line);
+      checklistItems.push(parseChecklistEntry(line));
       continue;
     }
 
     summary.push(line);
   }
 
+  const checklist = checklistItems.map((item) => item.text).filter(Boolean);
+
   return {
     assignees: unique(assignees),
-    checklist: checklist.filter(Boolean),
+    checklist,
+    checklistItems: checklistItems.filter((item) => item.text.length > 0),
+    checklistProgress: {
+      completed: checklistItems.filter((item) => item.done && item.text.length > 0).length,
+      total: checklist.length
+    },
     dueDate,
     labels: unique(labels),
     summary: summary.length > 0 ? summary.join("\n") : null,
