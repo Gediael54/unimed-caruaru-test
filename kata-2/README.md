@@ -1,90 +1,113 @@
-# Kata 2 - Board Profissional (Robust MVP)
+# Kata 2 - Board Profissional
 
-## Visao geral
+## Papel Deste README
 
-Esta documentacao posiciona a Kata 2 como um **robust MVP** de board
-profissional. O sistema continua intencionalmente simples em infraestrutura, mas
-deixa de ser uma todo-list basica.
+Este README e o guia local da Kata 2. Ele concentra:
 
-Escopo assumido:
+- o que a kata entrega como produto;
+- o que precisa ser instalado para rodar;
+- como subir backend e frontend;
+- como validar a parte .NET e a parte React;
+- qual documento ler em seguida.
+
+As discussoes mais densas ficam fora daqui:
+
+- `REQUISITOS.md` para produto e escopo;
+- `ENGENHARIA.md` para arquitetura e evolucao;
+- `TESTES.md` para estrategia de validacao.
+
+## Ordem Recomendada De Leitura
+
+1. este `README.md` para setup, estrutura e comandos;
+2. `REQUISITOS.md` para o contrato do board;
+3. `ENGENHARIA.md` para as decisoes de modelagem;
+4. `TESTES.md` para a estrategia de qualidade;
+5. `backend/`, `frontend/` e `backend.tests/` para o codigo.
+
+## O Que Esta Kata Entrega
+
+A Kata 2 foi tratada como um board interno em formato de robust MVP:
 
 - um unico workspace;
-- nenhuma autenticacao real;
-- nenhum conceito de time, papel ou permissao;
+- sem autenticacao real;
+- sem ownership por usuario;
 - cards com `title`, `description`, `priority` e `status`;
-- `DELETE` como arquivamento (`soft delete`), nao como exclusao definitiva.
+- arquivamento via `soft delete`;
+- frontend com multiplas leituras visuais do mesmo estado;
+- backend HTTP com contrato claro e testes.
 
-O foco do MVP e provar boa modelagem de board, contrato claro e evolucao
-arquitetural consistente, sem encenar colaboracao que o produto ainda nao
-sustenta.
+O objetivo aqui e provar produto, contrato e evolucao arquitetural sem encenar colaboracao que o sistema ainda nao sustenta.
 
-## Contrato funcional esperado
+## O Que Precisa Baixar
 
-### Campos principais do card
+Para rodar a Kata 2:
 
-- `id`
-- `title`
-- `description`
-- `priority`: `low`, `medium`, `high`
-- `status`: `pending`, `in_progress`, `completed`, `cancelled`
-- timestamps tecnicos de criacao/atualizacao
-- marcador de arquivamento para suportar `soft delete`
+- `.NET SDK 10`
+- `Node.js 22 LTS` ou `Node.js 20.19+`
+- `npm`
+- `curl`
+  - necessario apenas para o fluxo unificado em `bash` (`kata2 dev`);
+  - no Windows nativo ele nao e necessario para o runner `.cmd`.
 
-### Operacoes do board
+## Setup Antes Da Primeira Execucao
 
-- `GET /tasks`: lista cards ativos do workspace;
-- `GET /tasks?status=...`: filtra cards ativos por status;
-- `GET /tasks/{id}`: consulta um card especifico;
-- `POST /tasks`: cria card novo;
-- `PATCH /tasks/{id}`: atualiza `title`, `description`, `priority` e `status`;
-- `DELETE /tasks/{id}`: arquiva o card e remove do board ativo;
-- `GET /health`: health check tecnico;
-- `GET /openapi/v1.json`: contrato OpenAPI.
+Na raiz do repositorio:
 
-## O que mudou em relacao ao MVP antigo
+```bash
+dotnet restore kata-2/backend.tests/TaskBoard.Api.Tests.csproj
+npm --prefix kata-2/frontend install
+```
 
-O antigo recorte de "listar, criar, concluir e apagar" nao e suficiente para um
-board profissional. O robust MVP passa a exigir:
+Esses dois comandos resolvem o setup local da kata:
 
-- descricao para dar contexto ao trabalho;
-- prioridade para triagem real;
-- ciclo de status mais completo;
-- arquivamento em vez de exclusao destrutiva;
-- leitura visual mais rica no frontend, com prazo sinalizado, checklist com
-  progresso e metadados extraidos do texto estruturado do card;
-- documentacao honesta sobre o que ainda nao entrou.
+- o primeiro baixa os pacotes .NET do backend e dos testes;
+- o segundo baixa as dependencias do frontend React/TypeScript.
 
-Isso entrega evolucao seria de produto sem inflar a kata com subsistemas
-laterais.
+Antes de subir ou validar a kata, confirme:
 
-## Limite arquitetural intencional
+```bash
+dotnet --version
+node --version
+npm --version
+```
 
-Autenticacao, multiusuario, ownership por tarefa, times e permissao **nao**
-foram omitidos por descuido. Eles ficam fora porque representam uma nova fase de
-arquitetura:
+No Windows, se o runner reclamar de dependencia ausente no frontend ou de restore .NET pendente, ele agora informa exatamente qual comando rodar.
 
-- exigem identidade confiavel;
-- mudam o modelo de dados;
-- alteram o contrato HTTP;
-- introduzem autorizacao, auditoria e concorrencia entre sessoes.
+## Estrutura Da Pasta
 
-Enquanto isso nao existe de verdade, o sistema fica melhor documentado como
-single-workspace do que com um login ficticio.
+- `backend/`
+  - API .NET;
+- `backend.tests/`
+  - testes de regra, contrato HTTP e infraestrutura;
+- `frontend/`
+  - aplicacao React + TypeScript;
+- `artifacts/`
+  - saidas locais como logs, coverage e build do frontend;
+- `REQUISITOS.md`
+  - escopo e contrato do produto;
+- `ENGENHARIA.md`
+  - decisoes de arquitetura;
+- `TESTES.md`
+  - estrategia de validacao.
 
-## Por que nao adicionar login fake
+## Como Rodar
 
-Login fake seria pior que esta documentacao por tres razoes praticas:
+### Opcao 1 - Runner Unificado Em Bash
 
-- adiciona atrito de UX sem isolar dados nem proteger operacoes;
-- mascara a ausencia de ownership e permissao reais;
-- desloca o esforco para uma camada cenografica, em vez de fortalecer o board.
+```bash
+bash scripts/kata.sh kata2 dev
+```
 
-Em outras palavras: um board serio sem auth ainda e um MVP honesto; um board
-sem auth travestido de app autenticado e apenas mais confuso.
+Esse fluxo:
 
-## Como executar
+- sobe o backend em `http://localhost:5000`;
+- espera `/health` responder;
+- sobe o frontend em `http://localhost:5173`;
+- grava log do backend em `kata-2/artifacts/logs/backend.log`.
 
-Backend e frontend continuam rodando separadamente no ambiente local.
+Use esta opcao em Linux, macOS, WSL ou Git Bash.
+
+### Opcao 2 - Dois Terminais
 
 Backend:
 
@@ -95,13 +118,73 @@ dotnet run --project kata-2/backend/TaskBoard.Api.csproj --urls http://localhost
 Frontend:
 
 ```bash
-cd kata-2/frontend
-npm install
-npm run dev
+npm --prefix kata-2/frontend run dev
 ```
 
-## Leitura complementar
+### Opcao 3 - Windows Nativo Sem Bash
 
-- `REQUISITOS.md`: contrato de produto e justificativas de escopo;
-- `ENGENHARIA.md`: racional arquitetural do robust MVP e proxima fase;
-- `TESTES.md`: estrategia de testes esperada para esse recorte.
+```text
+scripts\kata.cmd kata2 dev
+```
+
+No Windows nativo esse comando abre duas janelas separadas: uma para o backend e outra para o frontend.
+
+Se preferir abrir manualmente:
+
+```text
+scripts\kata.cmd kata2 backend-dev
+scripts\kata.cmd kata2 frontend-dev
+```
+
+Se o frontend ainda nao tiver dependencias locais, rode antes:
+
+```text
+scripts\kata.cmd kata2 frontend-install
+```
+
+## Endpoints Principais
+
+- `GET /tasks`
+- `GET /tasks?status=pending|in_progress|completed|cancelled|archived`
+- `GET /tasks/{id}`
+- `POST /tasks`
+- `PATCH /tasks/{id}`
+- `DELETE /tasks/{id}`
+- `GET /health`
+- `GET /openapi/v1.json`
+
+## Validacao
+
+### Runner
+
+```bash
+bash scripts/kata.sh kata2 all
+```
+
+Windows nativo:
+
+```text
+scripts\kata.cmd kata2 all
+```
+
+### Manual
+
+```bash
+dotnet restore kata-2/backend.tests/TaskBoard.Api.Tests.csproj
+dotnet build kata-2/backend/TaskBoard.Api.csproj --no-restore
+dotnet test kata-2/backend.tests/TaskBoard.Api.Tests.csproj --filter Scope=Backend
+dotnet test kata-2/backend.tests/TaskBoard.Api.Tests.csproj --filter Scope=Api
+npm --prefix kata-2/frontend install
+npm --prefix kata-2/frontend run lint
+npm --prefix kata-2/frontend run test
+npm --prefix kata-2/frontend run build
+```
+
+## O Que Ler Depois Deste README
+
+- `REQUISITOS.md`
+  - escopo assumido, contrato do board e limites intencionais;
+- `ENGENHARIA.md`
+  - modelagem, trade-offs e evolucao;
+- `TESTES.md`
+  - cobertura, fluxos validados e criterio de revisao.
