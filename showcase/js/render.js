@@ -74,6 +74,7 @@ function renderNav() {
       ).join("")}
     </div>
     <div class="nav-actions">
+      <span class="nav-actions-label">Atalhos do ambiente atual</span>
       <button class="copy-button secondary" data-copy="${escapeHtml(runnerCommand)}">Copiar runner ${runnerFamily}</button>
       <button class="copy-button secondary" data-copy="${escapeHtml(showcaseCommand)}">Copiar showcase ${runnerFamily}</button>
     </div>
