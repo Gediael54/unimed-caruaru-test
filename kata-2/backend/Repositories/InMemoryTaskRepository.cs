@@ -50,6 +50,21 @@ public sealed class InMemoryTaskRepository : ITaskRepository
         }
     }
 
+    public BoardTask? Update(Guid id, Func<BoardTask, BoardTask> update)
+    {
+        lock (syncRoot)
+        {
+            if (!tasks.TryGetValue(id, out var current))
+            {
+                return null;
+            }
+
+            var updated = update(current);
+            tasks[id] = updated;
+            return updated;
+        }
+    }
+
     public bool Delete(Guid id)
     {
         lock (syncRoot)
