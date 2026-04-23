@@ -56,6 +56,27 @@ Na pratica, isso significa que o sistema opera sobre um unico contexto de
 trabalho compartilhado pelo produto, sem precisar decidir ainda quem e dono de
 cada card.
 
+## 3.1 Trade-off da descricao estruturada
+
+O frontend passou a interpretar marcadores como `Responsável`, `Prazo`,
+`Labels` e `Checklist` dentro de `description`. Isso foi uma escolha
+intencional de trade-off:
+
+- **ganho**: permite um board mais proximo de ferramentas reais, com sinais
+  visuais mais ricos por card;
+- **ganho**: adiciona progresso de checklist e leitura de prazo sem inflar o
+  contrato HTTP agora;
+- **ganho**: preserva compatibilidade com cards simples, que continuam aceitando
+  texto livre;
+- **custo**: parte da semantica de produto ainda vive em convencao textual, nao
+  em campos dedicados do dominio;
+- **custo**: uma fase futura mais madura provavelmente vai promover esses dados
+  para campos explicitos ou entidades proprias.
+
+Para esta prova, essa escolha foi considerada adequada porque aumenta valor de
+produto e UX sem fingir uma modelagem que o backend ainda nao sustenta por
+completo.
+
 ## 4. Por que auth, times e permissao ficam para a proxima fase
 
 Esses temas foram explicitamente empurrados para a fase seguinte porque nao sao
