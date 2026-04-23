@@ -74,114 +74,125 @@ public sealed class TaskService(ITaskRepository repository)
 
     public ServiceResult<TaskResponse> Update(Guid id, UpdateTaskRequest request)
     {
-        var current = repository.Get(id);
-        if (current is null)
+        string? validationError = null;
+        var updated = repository.Update(id, current =>
+        {
+            if (request.Title is null && request.Description is null && request.Priority is null && request.Status is null)
+            {
+                validationError = "At least one updatable field must be provided.";
+                return current;
+            }
+
+            var nextTitle = current.Title;
+            var nextDescription = current.Description;
+            var nextPriority = current.Priority;
+            if (request.Title is not null)
+            {
+                var normalizedTitle = NormalizeTitle(request.Title);
+                if (normalizedTitle.Error is not null)
+                {
+                    validationError = normalizedTitle.Error;
+                    return current;
+                }
+
+                nextTitle = normalizedTitle.Value!;
+            }
+
+            if (request.Description is not null)
+            {
+                var normalizedDescription = NormalizeDescription(request.Description);
+                if (normalizedDescription.Error is not null)
+                {
+                    validationError = normalizedDescription.Error;
+                    return current;
+                }
+
+                nextDescription = normalizedDescription.Value;
+            }
+
+            if (request.Priority is not null)
+            {
+                var normalizedPriority = NormalizeRequiredPriority(request.Priority);
+                if (normalizedPriority.Error is not null)
+                {
+                    validationError = normalizedPriority.Error;
+                    return current;
+                }
+
+                nextPriority = normalizedPriority.Value!;
+            }
+
+            var nextStatus = current.Status;
+            if (request.Status is not null)
+            {
+                var normalizedStatus = NormalizeRequiredStatus(request.Status);
+                if (normalizedStatus.Error is not null)
+                {
+                    validationError = normalizedStatus.Error;
+                    return current;
+                }
+
+                nextStatus = normalizedStatus.Value!;
+            }
+
+            if (nextTitle == current.Title
+                && nextDescription == current.Description
+                && nextPriority == current.Priority
+                && nextStatus == current.Status)
+            {
+                return current;
+            }
+
+            DateTimeOffset? nextArchivedAt = nextStatus == TaskStatuses.Archived
+                ? current.ArchivedAt ?? DateTimeOffset.UtcNow
+                : null;
+
+            return current with
+            {
+                Title = nextTitle,
+                Description = nextDescription,
+                Priority = nextPriority,
+                Status = nextStatus,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                ArchivedAt = nextArchivedAt,
+            };
+        });
+
+        if (updated is null)
         {
             return ServiceResult<TaskResponse>.NotFound("Task not found.");
         }
 
-        if (request.Title is null && request.Description is null && request.Priority is null && request.Status is null)
+        if (validationError is not null)
         {
-            return ServiceResult<TaskResponse>.Validation(
-                "At least one updatable field must be provided.");
+            return ServiceResult<TaskResponse>.Validation(validationError);
         }
-
-        var nextTitle = current.Title;
-        var nextDescription = current.Description;
-        var nextPriority = current.Priority;
-        if (request.Title is not null)
-        {
-            var normalizedTitle = NormalizeTitle(request.Title);
-            if (normalizedTitle.Error is not null)
-            {
-                return ServiceResult<TaskResponse>.Validation(normalizedTitle.Error);
-            }
-
-            nextTitle = normalizedTitle.Value!;
-        }
-
-        if (request.Description is not null)
-        {
-            var normalizedDescription = NormalizeDescription(request.Description);
-            if (normalizedDescription.Error is not null)
-            {
-                return ServiceResult<TaskResponse>.Validation(normalizedDescription.Error);
-            }
-
-            nextDescription = normalizedDescription.Value;
-        }
-
-        if (request.Priority is not null)
-        {
-            var normalizedPriority = NormalizeRequiredPriority(request.Priority);
-            if (normalizedPriority.Error is not null)
-            {
-                return ServiceResult<TaskResponse>.Validation(normalizedPriority.Error);
-            }
-
-            nextPriority = normalizedPriority.Value!;
-        }
-
-        var nextStatus = current.Status;
-        if (request.Status is not null)
-        {
-            var normalizedStatus = NormalizeRequiredStatus(request.Status);
-            if (normalizedStatus.Error is not null)
-            {
-                return ServiceResult<TaskResponse>.Validation(normalizedStatus.Error);
-            }
-
-            nextStatus = normalizedStatus.Value!;
-        }
-
-        if (nextTitle == current.Title
-            && nextDescription == current.Description
-            && nextPriority == current.Priority
-            && nextStatus == current.Status)
-        {
-            return ServiceResult<TaskResponse>.Success(ToResponse(current));
-        }
-
-        DateTimeOffset? nextArchivedAt = nextStatus == TaskStatuses.Archived
-            ? current.ArchivedAt ?? DateTimeOffset.UtcNow
-            : null;
-
-        var updated = current with
-        {
-            Title = nextTitle,
-            Description = nextDescription,
-            Priority = nextPriority,
-            Status = nextStatus,
-            UpdatedAt = DateTimeOffset.UtcNow,
-            ArchivedAt = nextArchivedAt,
-        };
-
-        repository.Update(updated);
 
         return ServiceResult<TaskResponse>.Success(ToResponse(updated));
     }
 
     public ServiceResult<bool> Delete(Guid id)
     {
-        var current = repository.Get(id);
-        if (current is null)
+        var archived = repository.Update(id, current =>
+        {
+            if (current.Status == TaskStatuses.Archived)
+            {
+                return current;
+            }
+
+            var archivedAt = DateTimeOffset.UtcNow;
+            return current with
+            {
+                Status = TaskStatuses.Archived,
+                UpdatedAt = archivedAt,
+                ArchivedAt = archivedAt,
+            };
+        });
+
+        if (archived is null)
         {
             return ServiceResult<bool>.NotFound("Task not found.");
         }
-
-        if (current.Status == TaskStatuses.Archived)
-        {
-            return ServiceResult<bool>.Success(true);
-        }
-
-        var archived = current with
-        {
-            Status = TaskStatuses.Archived,
-            UpdatedAt = DateTimeOffset.UtcNow,
-            ArchivedAt = DateTimeOffset.UtcNow,
-        };
-
-        repository.Update(archived);
 
         return ServiceResult<bool>.Success(true);
     }
