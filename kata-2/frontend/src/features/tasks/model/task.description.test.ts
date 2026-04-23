@@ -10,8 +10,8 @@ describe("parseTaskDescription", () => {
         "Prazo: 25/04/2026",
         "Labels: jurídico, aprovação",
         "Checklist:",
-        "- Validar contrato",
-        "- Anexar evidências"
+        "- [x] Validar contrato",
+        "- [ ] Anexar evidências"
       ].join("\n")
     );
 
@@ -20,6 +20,11 @@ describe("parseTaskDescription", () => {
     expect(parsed.dueDate).toBe("25/04/2026");
     expect(parsed.labels).toEqual(["jurídico", "aprovação"]);
     expect(parsed.checklist).toEqual(["Validar contrato", "Anexar evidências"]);
+    expect(parsed.checklistItems).toEqual([
+      { done: true, text: "Validar contrato" },
+      { done: false, text: "Anexar evidências" }
+    ]);
+    expect(parsed.checklistProgress).toEqual({ completed: 1, total: 2 });
   });
 
   it("keeps plain text intact when no indicators are present", () => {
@@ -29,6 +34,8 @@ describe("parseTaskDescription", () => {
     expect(parsed.assignees).toEqual([]);
     expect(parsed.labels).toEqual([]);
     expect(parsed.checklist).toEqual([]);
+    expect(parsed.checklistItems).toEqual([]);
+    expect(parsed.checklistProgress).toEqual({ completed: 0, total: 0 });
     expect(parsed.dueDate).toBeNull();
   });
 
@@ -51,6 +58,13 @@ describe("parseTaskDescription", () => {
       "Revisar pendências com o time",
       "Publicar retorno final"
     ]);
+    expect(parsed.checklistItems).toEqual([
+      { done: false, text: "validar contrato" },
+      { done: false, text: "anexar evidências" },
+      { done: false, text: "Revisar pendências com o time" },
+      { done: false, text: "Publicar retorno final" }
+    ]);
+    expect(parsed.checklistProgress).toEqual({ completed: 0, total: 4 });
   });
 
   it("returns empty metadata for null descriptions", () => {
@@ -60,6 +74,8 @@ describe("parseTaskDescription", () => {
     expect(parsed.assignees).toEqual([]);
     expect(parsed.labels).toEqual([]);
     expect(parsed.checklist).toEqual([]);
+    expect(parsed.checklistItems).toEqual([]);
+    expect(parsed.checklistProgress).toEqual({ completed: 0, total: 0 });
     expect(parsed.dueDate).toBeNull();
   });
 });
