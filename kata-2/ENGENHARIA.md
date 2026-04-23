@@ -1,7 +1,6 @@
 # Kata 2 - Engenharia
 
-Este arquivo registra o racional tecnico da Kata 2 no novo recorte de
-**robust MVP**.
+Este arquivo registra o racional tecnico da Kata 2 no recorte atual.
 
 ## 1. Decisao central de arquitetura
 
@@ -74,7 +73,7 @@ intencional de trade-off:
   para campos explicitos ou entidades proprias.
 
 Para esta prova, essa escolha foi considerada adequada porque aumenta valor de
-produto e UX sem fingir uma modelagem que o backend ainda nao sustenta por
+produto e UX sem exigir uma modelagem que o backend ainda nao sustenta por
 completo.
 
 ## 4. Por que auth, times e permissao ficam para a proxima fase
@@ -89,8 +88,8 @@ detalhes de UI. Eles exigem mudancas estruturais:
 4. **Operacao**: trilha de acesso, observabilidade, rate limit e politicas de
    incidente.
 
-Documentar isso como proxima fase e mais correto do que fingir que um login
-cosmetico resolve o problema.
+Documentar isso como proxima fase e mais correto do que incluir um login
+cosmetico sem isolamento real.
 
 ## 5. Por que login fake seria pior
 
@@ -115,7 +114,7 @@ Tratar `DELETE` como arquivamento e a escolha mais coerente para este MVP:
 
 - evita perda destrutiva de informacao;
 - aproxima o comportamento de ferramentas de board reais;
-- deixa espaco para historico e restauracao futura;
+- deixa espaco para historico, restauracao operacional e uma lixeira completa futura;
 - continua simples do ponto de vista de UX.
 
 A implementacao recomendada e marcar o card como arquivado e exclui-lo apenas da
@@ -137,6 +136,6 @@ Esse sequenciamento preserva o MVP atual e evita retrabalho de contrato.
 
 ## 8. Sintese tecnica
 
-O robust MVP da Kata 2 nao tenta parecer um produto enterprise completo. Ele
-faz algo melhor: entrega um board crivel com modelo de dominio mais forte e
-deixa explicito que colaboracao autenticada e uma etapa arquitetural propria.
+O escopo atual da Kata 2 nao tenta parecer um produto enterprise completo. Ele
+entrega um board crivel com modelo de dominio mais forte e deixa explicito que
+colaboracao autenticada e uma etapa arquitetural propria.
