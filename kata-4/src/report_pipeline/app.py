@@ -181,9 +181,13 @@ def parse_money(value: str | None) -> Decimal:
     if value is None or not value.strip():
         raise ValueError("Money value is required")
 
-    clean_value = value.strip()
+    clean_value = "".join(value.strip().split())
     if "," in clean_value and "." in clean_value:
-        normalized = clean_value.replace(".", "").replace(",", ".")
+        comma_position = clean_value.rfind(",")
+        dot_position = clean_value.rfind(".")
+        decimal_separator = "," if comma_position > dot_position else "."
+        thousands_separator = "." if decimal_separator == "," else ","
+        normalized = clean_value.replace(thousands_separator, "").replace(decimal_separator, ".")
     elif "," in clean_value:
         normalized = clean_value.replace(",", ".")
     else:
@@ -228,6 +232,11 @@ def require_any(row: dict[str, str], *fields: str) -> str:
         if value is not None and value.strip():
             return value.strip()
     raise ValueError(f"{fields[0]} is required")
+
+
+def normalize_delivery_status(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    return normalized or "sem_entrega"
 
 
 def optional_any(row: dict[str, str], *fields: str) -> str:
@@ -312,7 +321,7 @@ def load_deliveries(path: Path) -> tuple[dict[str, Delivery], list[dict[str, str
                 data_realizada_entrega=normalize_date(
                     optional_any(row, "data_realizada", "data_realizada_entrega")
                 ),
-                status_entrega=(row.get("status_entrega") or "sem_entrega").strip().lower(),
+                status_entrega=normalize_delivery_status(row.get("status_entrega")),
             )
         except ValueError as exc:
             rejected.append(
@@ -392,7 +401,13 @@ def calculate_indicators(
         state_totals[row.estado] += row.valor_total
         state_counts[row.estado] += 1
 
-    delivered_rows = [row for row in rows if row.data_realizada_entrega is not None]
+    delivered_rows = [
+        row
+        for row in rows
+        if row.status_pedido != "cancelado"
+        and row.status_entrega == "entregue"
+        and row.data_realizada_entrega is not None
+    ]
     rated_rows = [row for row in delivered_rows if row.atraso_dias is not None]
     delayed_rows = [row for row in rated_rows if row.atraso_dias > 0]
     on_time_rows = [row for row in rated_rows if row.atraso_dias <= 0]
@@ -441,7 +456,7 @@ def calculate_indicators(
 
 def write_consolidated(path: Path, rows: list[ConsolidatedOrder]) -> None:
     with path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=CONSOLIDATED_COLUMNS)
+        writer = csv.DictWriter(file, fieldnames=CONSOLIDATED_COLUMNS, lineterminator="\n")
         writer.writeheader()
         writer.writerows(row.as_csv_row() for row in rows)
 
@@ -453,7 +468,7 @@ def write_rejected(path: Path, rejected: list[dict[str, str]]) -> None:
         return
 
     with path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=REJECTED_COLUMNS)
+        writer = csv.DictWriter(file, fieldnames=REJECTED_COLUMNS, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rejected)
 
