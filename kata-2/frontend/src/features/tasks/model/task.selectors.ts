@@ -14,9 +14,11 @@ import type {
   TaskBucket,
   TaskFilter,
   TaskPriority,
+  TaskSortMode,
   TaskSummary,
   TaskViewMode
 } from "./task.types";
+import { parseTaskDescription } from "./task.description";
 
 const priorityWeights: Record<TaskPriority, number> = {
   high: 3,
@@ -59,13 +61,11 @@ export function buildTaskBuckets(tasks: Task[]): TaskBucket[] {
 }
 
 export function buildFocusBuckets(tasks: Task[]) {
-  const sorted = sortTasksByRecentActivity(tasks);
-
   return {
-    active: sorted.filter(
+    active: tasks.filter(
       (task) => task.status === "pending" || task.status === "in_progress"
     ),
-    closed: sorted.filter(
+    closed: tasks.filter(
       (task) => task.status === "completed" || task.status === "cancelled"
     )
   };
@@ -91,6 +91,46 @@ export function sortTasksByRecentActivity(tasks: Task[]): Task[] {
     }
 
     return left.title.localeCompare(right.title, "pt-BR");
+  });
+}
+
+export function sortTasks(tasks: Task[], sortMode: TaskSortMode): Task[] {
+  switch (sortMode) {
+    case "priority":
+      return sortTasksByRecentActivity(tasks);
+    case "recent":
+      return [...tasks].sort(
+        (left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
+      );
+    case "created":
+      return [...tasks].sort(
+        (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)
+      );
+    case "title":
+      return [...tasks].sort((left, right) => left.title.localeCompare(right.title, "pt-BR"));
+  }
+}
+
+export function filterTasksByQuery(tasks: Task[], query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
+  if (!normalizedQuery) {
+    return tasks;
+  }
+
+  return tasks.filter((task) => {
+    const description = parseTaskDescription(task.description);
+    const haystack = [
+      task.title,
+      description.summary ?? "",
+      description.assignees.join(" "),
+      description.labels.join(" "),
+      description.dueDate ?? "",
+      description.checklist.join(" ")
+    ]
+      .join(" ")
+      .toLocaleLowerCase("pt-BR");
+
+    return haystack.includes(normalizedQuery);
   });
 }
 
