@@ -50,8 +50,9 @@ Para rodar o repositorio completo localmente:
   - normalmente ja vem junto com o Node.js;
 - `Git Bash` ou `WSL` no Windows
   - opcional;
-  - so e necessario se voce quiser usar o runner em `bash` com menu visual;
-  - sem isso, o projeto continua executavel com `scripts\kata.cmd`.
+  - recomendado se voce quiser usar exatamente os mesmos comandos documentados no repositório e no showcase;
+  - a principal vantagem e liberar o runner completo em `bash`, com menu interativo, cores e o fluxo integrado da `kata-2`;
+  - sem isso, o projeto continua executavel com `scripts\kata.cmd`, mas como fallback funcional e sem o mesmo nivel de experiencia do runner principal.
 
 ## Como Confirmar O Ambiente
 
@@ -105,6 +106,13 @@ As Katas 1 e 4 usam `stdlib` + estrutura Python local; nao exigem `pip install`.
 - Se quiser a experiencia completa do runner com menu e cores, use `Git Bash` e rode `bash scripts/kata.sh`.
 - Se quiser ficar em `cmd.exe` ou PowerShell, use `scripts\kata.cmd`.
 - Os runners agora falham cedo quando falta ferramenta, `npm install` da `kata-2/frontend` ou `dotnet restore` da `kata-2`, e informam o comando exato para corrigir.
+
+Vantagens praticas de usar `bash`/Git Bash no Windows:
+
+- voce executa os mesmos comandos que aparecem na documentacao e no showcase, sem conversao para `.cmd`;
+- o runner ganha menu interativo, identidade visual e ajuda completa em uma unica entrada;
+- o `kata2 dev` sobe backend + frontend no mesmo fluxo, espera o `/health` e encerra o backend junto quando voce fecha o processo.
+- tambem vale abrir o runner em `bash` para revisar a propria orquestracao da entrega, ja que o menu e os fluxos mostram como a execucao foi pensada.
 
 ## Formas De Executar
 
