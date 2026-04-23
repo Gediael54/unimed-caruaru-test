@@ -2,8 +2,8 @@
 
 ## 1. Decisao de escopo
 
-Esta kata deixa de ser uma todo-list minima e passa a ser um **robust MVP** de
-um board profissional, mas ainda com recorte controlado:
+Esta kata deixa de ser uma todo-list minima e passa a ser um board profissional
+de escopo controlado:
 
 - **single-workspace**: existe um unico quadro;
 - **sem autenticacao real**: nao existe login, sessao, tenant ou ownership por usuario;
@@ -11,8 +11,8 @@ um board profissional, mas ainda com recorte controlado:
 - **CRUD serio de board**: tarefas com `title`, `description`, `priority`,
   ciclo de status e arquivamento por `DELETE`.
 
-O objetivo e elevar o produto sem fingir uma camada de identidade que o sistema
-nao sustenta de verdade.
+O objetivo e elevar o produto sem incluir uma camada de identidade que o sistema
+ainda nao sustenta de verdade.
 
 ## 2. Ambiguidades resolvidas
 
@@ -55,8 +55,11 @@ nao sustenta de verdade.
 
 - **Pergunta ao cliente**: "Excluir significa apagar definitivamente?"
 - **Decisao**: `DELETE /tasks/{id}` faz **soft delete**, isto e, arquiva o card.
+  O card arquivado pode voltar ao board por `PATCH` para `pending`, mas isso e
+  tratado como desfazer operacional simples, nao como um fluxo completo de
+  lixeira.
 - **Justificativa**: arquivamento preserva historico e reduz risco operacional
-  sem introduzir a complexidade de um fluxo completo de lixeira/restauro.
+  sem introduzir a complexidade de um fluxo completo de lixeira.
 
 ## 3. Requisitos funcionais
 
@@ -71,6 +74,7 @@ nao sustenta de verdade.
 | RF-07 | Must-have | O sistema deve arquivar tarefa por `DELETE`. | **Given** uma tarefa existente, **when** o cliente envia `DELETE /tasks/{id}`, **then** recebe `204 No Content` e a tarefa deixa de aparecer no board ativo. |
 | RF-08 | Must-have | O sistema deve responder `404 Not Found` para IDs inexistentes. | **Given** um ID desconhecido, **when** o cliente tenta consultar, atualizar ou arquivar, **then** recebe `404 Not Found`. |
 | RF-09 | Must-have | O frontend deve operar o board como quadro profissional. | **Given** a API disponivel, **when** o usuario cria cards com contexto, move status, filtra por etapa e arquiva itens do board, **then** a UI reflete o estado atualizado do workspace. |
+| RF-10 | Should-have | O sistema deve permitir restaurar card arquivado para o board ativo. | **Given** uma tarefa arquivada, **when** o cliente atualiza o `status` para `pending`, **then** ela volta a aparecer na listagem ativa. |
 
 ## 4. Requisitos nao funcionais
 
@@ -86,14 +90,14 @@ nao sustenta de verdade.
 
 ## 5. Fora do escopo atual
 
-Os itens abaixo **nao** entram neste robust MVP e ficam documentados como
-proxima fase arquitetural:
+Os itens abaixo **nao** entram neste escopo e ficam documentados como proxima
+fase arquitetural:
 
 - autenticacao real;
 - times, papeis e permissao;
 - multiusuario e ownership por card;
 - colaboracao em tempo real;
-- restauracao de arquivo/lixeira com fluxo proprio;
+- lixeira completa com listagem dedicada, auditoria e fluxo proprio;
 - historico completo de transicoes e auditoria regulatoria.
 
 ## 6. Por que auth, times e permissoes ficam para a proxima fase
@@ -121,7 +125,7 @@ Adicionar login fake neste momento pioraria a entrega por quatro motivos:
 3. **Aumenta custo sem ganho estrutural**: telas, estado de sessao e mocks de
    usuario adicionam manutencao, mas nao resolvem ownership nem permissao.
 4. **Confunde a proxima fase**: documentar claramente a evolucao arquitetural e
-   mais honesto do que encenar um requisito ainda nao sustentado pelo sistema.
+   mais correto do que implementar um requisito ainda nao sustentado pelo sistema.
 
 ## 8. Sintese do MVP
 
