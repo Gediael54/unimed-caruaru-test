@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type DragEvent } from "react";
+import { useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import {
   Archive,
   Ban,
@@ -78,6 +78,30 @@ type RendererProps = Omit<
 type KanbanDragState = {
   sourceStatus: ActiveTaskStatus;
   taskId: string;
+};
+
+type TaskActionTone = "primary" | "ghost" | "danger";
+
+type TaskStatusAction = {
+  busyLabel: string;
+  icon: ReactNode;
+  kind: "status";
+  label: string;
+  status: TaskStatus;
+  tone: TaskActionTone;
+};
+
+type TaskArchiveAction = {
+  busyLabel: string;
+  icon: ReactNode;
+  kind: "archive";
+  label: string;
+  tone: TaskActionTone;
+};
+
+type TaskActionSet = {
+  primaryAction: TaskStatusAction;
+  secondaryActions: Array<TaskStatusAction | TaskArchiveAction>;
 };
 
 export function TaskBoardSurface({
@@ -451,8 +475,7 @@ function TaskCard({
   const statusClass = `task-status-text task-status-text--${task.status}`;
   const badgeClass = `task-badge task-badge--${task.status}`;
   const icon = getStatusIcon(task.status);
-  const actions = getTaskActions(task);
-  const [primaryAction, ...secondaryActions] = actions;
+  const { primaryAction, secondaryActions } = getTaskActions(task);
   const description = parseTaskDescription(task.description);
   const dueDateSignal = describeDueDateSignal(description.dueDate);
   const checklistProgressLabel = formatChecklistProgress(
@@ -614,11 +637,11 @@ function TaskCard({
   );
 }
 
-function getTaskActions(task: Task) {
+function getTaskActions(task: Task): TaskActionSet {
   switch (task.status) {
     case "pending":
-      return [
-        {
+      return {
+        primaryAction: {
           label: "Iniciar",
           busyLabel: "Movendo...",
           status: "in_progress" as const,
@@ -626,25 +649,27 @@ function getTaskActions(task: Task) {
           tone: "primary",
           icon: <Play size={14} aria-hidden="true" />
         },
-        {
+        secondaryActions: [
+          {
           label: "Cancelar",
           busyLabel: "Movendo...",
           status: "cancelled" as const,
           kind: "status" as const,
           tone: "ghost",
           icon: <Ban size={14} aria-hidden="true" />
-        },
-        {
+          },
+          {
           label: "Arquivar",
           busyLabel: "Arquivando...",
           kind: "archive" as const,
           tone: "danger",
           icon: <Archive size={14} aria-hidden="true" />
-        }
-      ];
+          }
+        ]
+      };
     case "in_progress":
-      return [
-        {
+      return {
+        primaryAction: {
           label: "Concluir",
           busyLabel: "Movendo...",
           status: "completed" as const,
@@ -652,26 +677,28 @@ function getTaskActions(task: Task) {
           tone: "primary",
           icon: <CheckCircle2 size={14} aria-hidden="true" />
         },
-        {
+        secondaryActions: [
+          {
           label: "Cancelar",
           busyLabel: "Movendo...",
           status: "cancelled" as const,
           kind: "status" as const,
           tone: "ghost",
           icon: <Ban size={14} aria-hidden="true" />
-        },
-        {
+          },
+          {
           label: "Arquivar",
           busyLabel: "Arquivando...",
           kind: "archive" as const,
           tone: "danger",
           icon: <Archive size={14} aria-hidden="true" />
-        }
-      ];
+          }
+        ]
+      };
     case "completed":
     case "cancelled":
-      return [
-        {
+      return {
+        primaryAction: {
           label: "Reabrir",
           busyLabel: "Reabrindo...",
           status: "pending" as const,
@@ -679,25 +706,28 @@ function getTaskActions(task: Task) {
           tone: "ghost",
           icon: <RotateCcw size={14} aria-hidden="true" />
         },
-        {
+        secondaryActions: [
+          {
           label: "Arquivar",
           busyLabel: "Arquivando...",
           kind: "archive" as const,
           tone: "danger",
           icon: <Archive size={14} aria-hidden="true" />
-        }
-      ];
+          }
+        ]
+      };
     case "archived":
-      return [
-        {
+      return {
+        primaryAction: {
           label: "Restaurar",
           busyLabel: "Restaurando...",
           status: "pending" as const,
           kind: "status" as const,
           tone: "primary",
           icon: <RotateCcw size={14} aria-hidden="true" />
-        }
-      ];
+        },
+        secondaryActions: []
+      };
   }
 }
 
