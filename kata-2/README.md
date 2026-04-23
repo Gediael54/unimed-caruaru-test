@@ -105,6 +105,13 @@ Esse fluxo:
 - sobe o frontend em `http://localhost:5173`;
 - grava log do backend em `kata-2/artifacts/logs/backend.log`.
 
+Vantagem pratica do `bash` aqui:
+
+- esse e o unico fluxo que sobe tudo em uma chamada so;
+- ele valida o health check antes de abrir o frontend;
+- ele limpa o backend automaticamente quando voce encerra a sessao.
+- ele tambem deixa o proprio runner auditavel pelo avaliador, porque o fluxo integrado mostra como a orquestracao da kata foi montada.
+
 Use esta opcao em Linux, macOS, WSL ou Git Bash.
 
 ### Opcao 2 - Dois Terminais
@@ -128,6 +135,8 @@ scripts\kata.cmd kata2 dev
 ```
 
 No Windows nativo esse comando abre duas janelas separadas: uma para o backend e outra para o frontend.
+
+Funciona bem para execucao e validacao, mas foi mantido como fallback de Windows nativo e abre mao do fluxo integrado com health check, cleanup automatico e leitura do runner no mesmo nivel do `bash`.
 
 Se preferir abrir manualmente:
 
