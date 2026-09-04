@@ -1,0 +1,9 @@
+# Fixa este checkout num escopo do ai-memory, independente do caminho em disco.
+# O roteamento e por NOME, nao por caminho: este repo aqui e o mesmo repo em
+# outra maquina resolvem para a MESMA memoria.
+#
+# "workspace" e obrigatorio pelo schema, mesmo valendo "default".
+# Com "project" explicito, "project_strategy" e ignorado.
+# O nome precisa casar ^[a-z0-9][a-z0-9._-]*$ (minusculo).
+workspace = "default"
+project = "unimed-caruaru-test"
